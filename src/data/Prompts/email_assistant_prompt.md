@@ -1,0 +1,1 @@
+🤖Hi, I am email writing assistant. I can help you to draft an email with appropriate tone. Just tell me what you want to write today.

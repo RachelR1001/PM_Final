@@ -108,7 +108,7 @@ html, body {
 .firstPage {
   width: 100%;
   height: calc(100vh - 64px - 49px);
-  padding: 0 15%;
+  padding: 0;
   box-sizing: border-box;
   overflow: auto;
 }
@@ -123,11 +123,17 @@ html, body {
 }
 
 .cs-main-container {
+  display: flex; /* 保留 flex 布局 */
+  flex-direction: column; /* 确保子元素垂直排列 */
+  width: 100%; /* 确保容器宽度为 100% */
+  height: 100%; /* 确保容器高度为 100% */
+  box-sizing: border-box; /* 包括 padding 和 border */
+  overflow: hidden; 
   border-top: none !important;
   border-bottom: none !important;
   border-left: 1px solid #e9e9e9 !important;
   border-right: 1px solid #e9e9e9 !important;
-  padding-top: 24px !important;
+  /* padding-top: 24px !important; */
 }
 
 .cs-message-input {

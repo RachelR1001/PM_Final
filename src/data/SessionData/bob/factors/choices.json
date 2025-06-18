@@ -1,0 +1,23 @@
+[
+  {
+    "id": "relationship_type",
+    "title": "Relationship type",
+    "options": [
+      "Friends and family"
+    ]
+  },
+  {
+    "id": "power_difference",
+    "title": "Power, resource, status, hierarchy difference",
+    "options": [
+      "Equal"
+    ]
+  },
+  {
+    "id": "you_want_receiver_feel",
+    "title": "You want the receiver to feel you are",
+    "options": [
+      "Gratitude / Appreciation 🙏"
+    ]
+  }
+]

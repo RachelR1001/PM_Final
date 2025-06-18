@@ -1,0 +1,23 @@
+[
+  {
+    "id": "relationship_type",
+    "title": "Relationship type",
+    "options": [
+      "Friends and family"
+    ]
+  },
+  {
+    "id": "familiarity",
+    "title": "Familiarity",
+    "options": [
+      "Familiar"
+    ]
+  },
+  {
+    "id": "you_want_receiver_feel",
+    "title": "You want the receiver to feel you are",
+    "options": [
+      "Gratitude / Appreciation 🙏"
+    ]
+  }
+]
