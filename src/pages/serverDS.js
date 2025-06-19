@@ -553,58 +553,35 @@ app.post('/create-session', (req, res) => {
     const taskPath = path.join(userPath, taskId);
 
     try {
-        // 创建用户目录
+        // Create user directory if it doesn't exist
         if (!fs.existsSync(userPath)) {
             fs.mkdirSync(userPath, { recursive: true });
         }
 
-        // 创建任务目录
+        // Create task directory if it doesn't exist
         if (!fs.existsSync(taskPath)) {
             fs.mkdirSync(taskPath, { recursive: true });
         }
 
-        // 创建 meta 目录和 task.json 文件
-        const metaPath = path.join(taskPath, 'meta');
-        if (!fs.existsSync(metaPath)) {
-            fs.mkdirSync(metaPath, { recursive: true });
-        }
-        const taskJsonPath = path.join(metaPath, 'task.json');
+        // Create subdirectories and files
+        const subDirs = ['meta', 'factors', 'intents', 'drafts', 'localized', 'logs'];
+        subDirs.forEach((subDir) => {
+            const subDirPath = path.join(taskPath, subDir);
+            if (!fs.existsSync(subDirPath)) {
+                fs.mkdirSync(subDirPath, { recursive: true });
+            }
+        });
+
+        // Create task.json in the meta directory
+        const taskJsonPath = path.join(taskPath, 'meta', 'task.json');
         const taskJsonContent = {
             user: userName,
             task_id: taskId,
             created_iso: new Date().toISOString(),
-            original_task: userInput
+            original_task: userInput,
         };
-        fs.writeFileSync(taskJsonPath, JSON.stringify(taskJsonContent, null, 2));
-
-        // 创建 factors 目录
-        const factorsPath = path.join(taskPath, 'factors');
-        if (!fs.existsSync(factorsPath)) {
-            fs.mkdirSync(factorsPath, { recursive: true });
-        }
-
-        // 创建 intents 目录
-        const intentsPath = path.join(taskPath, 'intents');
-        if (!fs.existsSync(intentsPath)) {
-            fs.mkdirSync(intentsPath, { recursive: true });
-        }
-
-        // 创建 drafts 目录
-        const draftsPath = path.join(taskPath, 'drafts');
-        if (!fs.existsSync(draftsPath)) {
-            fs.mkdirSync(draftsPath, { recursive: true });
-        }
-
-        // 创建 localized 目录
-        const localizedPath = path.join(taskPath, 'localized');
-        if (!fs.existsSync(localizedPath)) {
-            fs.mkdirSync(localizedPath, { recursive: true });
-        }
-
-        // 创建 logs 目录
-        const logsPath = path.join(taskPath, 'logs');
-        if (!fs.existsSync(logsPath)) {
-            fs.mkdirSync(logsPath, { recursive: true });
+        if (!fs.existsSync(taskJsonPath)) {
+            fs.writeFileSync(taskJsonPath, JSON.stringify(taskJsonContent, null, 2));
         }
 
         res.status(200).json({ message: 'Session 数据已创建', taskId });
@@ -616,8 +593,6 @@ app.post('/create-session', (req, res) => {
 
 app.post('/save-factor-choices', (req, res) => {
     const { userName, factorChoices, taskId } = req.body;
-
-    console.log('Save Factor Choices Request Body:', req.body);
 
     if (!userName || !factorChoices || !taskId) {
         return res.status(400).json({ error: 'userName、factorChoices 和 taskId 是必需的' });
@@ -642,8 +617,6 @@ app.post('/save-factor-choices', (req, res) => {
 app.post('/analyze-intent', async (req, res) => {
     const { userTask, factorChoices, userName, taskId } = req.body;
 
-    console.log('Analyze Intent Request Body:', req.body);
-
     if (!userTask || !factorChoices || !userName || !taskId) {
         return res.status(400).json({ error: 'userTask、factorChoices、userName 和 taskId 是必需的' });
     }
@@ -657,9 +630,12 @@ app.post('/analyze-intent', async (req, res) => {
         return res.status(500).json({ error: '加载 intent_analyzer_prompt.md 文件失败' });
     }
 
+    // Generate the prompt by replacing placeholders
     const prompt = promptTemplate
         .replace('{{USER_TASK}}', userTask)
         .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2));
+
+    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
 
     try {
         const response = await sendRequestToDeepSeek(prompt);
@@ -670,40 +646,24 @@ app.post('/analyze-intent', async (req, res) => {
         }
 
         const rawContent = response.choices[0].message.content.trim();
-        const jsonContent = rawContent.replace(/```json|```/g, ''); // 移除 Markdown 格式标记
+        const jsonContent = rawContent.replace(/```json|```/g, ''); // Remove Markdown formatting
 
-        let parsedData;
-        try {
-            parsedData = JSON.parse(jsonContent);
-        } catch (error) {
-            console.error('解析 JSON 数据失败:', jsonContent);
-            return res.status(500).json({ error: '解析 JSON 数据失败' });
+        const parsedData = JSON.parse(jsonContent);
+
+        if (!fs.existsSync(path.dirname(intentsPath))) {
+            fs.mkdirSync(path.dirname(intentsPath), { recursive: true });
         }
-
-        const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
-        console.log('Intents Path:', intentsPath);
-
-        try {
-            if (!fs.existsSync(path.dirname(intentsPath))) {
-                fs.mkdirSync(path.dirname(intentsPath), { recursive: true });
-            }
-            fs.writeFileSync(intentsPath, JSON.stringify(parsedData, null, 2));
-        } catch (error) {
-            console.error('写入 intents/current.json 文件失败:', error);
-            return res.status(500).json({ error: '写入 intents/current.json 文件失败' });
-        }
+        fs.writeFileSync(intentsPath, JSON.stringify(parsedData, null, 2));
 
         res.json(parsedData);
     } catch (error) {
-        console.error('分析意图时出错:', error);
-        res.status(500).json({ error: '分析意图时出错' });
+        console.error('Error analyzing intent:', error);
+        res.status(500).json({ error: 'Error analyzing intent' });
     }
 });
 
 app.post('/generate-first-draft', async (req, res) => {
     const { userTask, factorChoices, intents, userName, taskId } = req.body;
-
-    console.log('Generate First Draft Request Body:', req.body);
 
     if (!userTask || !factorChoices || !intents || !userName || !taskId) {
         return res.status(400).json({ error: 'userTask、factorChoices、intents、userName 和 taskId 是必需的' });
@@ -718,10 +678,13 @@ app.post('/generate-first-draft', async (req, res) => {
         return res.status(500).json({ error: '加载 first_draft_composer_prompt.md 文件失败' });
     }
 
+    // Generate the prompt by replacing placeholders
     const prompt = promptTemplate
         .replace('{{USER_TASK}}', userTask)
         .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
         .replace('{{INTENT_CURRENT}}', JSON.stringify(intents, null, 2));
+
+    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
 
     try {
         const response = await sendRequestToDeepSeek(prompt);
@@ -732,23 +695,54 @@ app.post('/generate-first-draft', async (req, res) => {
         }
 
         const draftContent = response.choices[0].message.content.trim();
-        const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
-        console.log('Drafts Path:', draftsPath);
 
-        try {
-            if (!fs.existsSync(path.dirname(draftsPath))) {
-                fs.mkdirSync(path.dirname(draftsPath), { recursive: true });
-            }
-            fs.writeFileSync(draftsPath, draftContent);
-        } catch (error) {
-            console.error('写入 drafts/latest.md 文件失败:', error);
-            return res.status(500).json({ error: '写入 drafts/latest.md 文件失败' });
+        if (!fs.existsSync(path.dirname(draftsPath))) {
+            fs.mkdirSync(path.dirname(draftsPath), { recursive: true });
         }
+        fs.writeFileSync(draftsPath, draftContent);
 
         res.json({ draft: draftContent });
     } catch (error) {
-        console.error('生成第一版草稿时出错:', error);
-        res.status(500).json({ error: '生成第一版草稿时出错' });
+        console.error('Error generating first draft:', error);
+        res.status(500).json({ error: 'Error generating first draft' });
+    }
+});
+
+// 提供 SessionData 文件的静态访问
+app.get('/sessiondata/:taskId/*', (req, res) => {
+    const { taskId } = req.params;
+    const filePath = req.params[0]; // 获取剩余的路径部分
+    
+    // 从 taskId 中提取用户名（假设格式为 userName_timestamp）
+    const userName = taskId.split('_')[0];
+    
+    const fullPath = path.join(__dirname, '../data/SessionData', userName, taskId, filePath);
+    
+    console.log('请求文件路径:', fullPath);
+    
+    // 检查文件是否存在
+    if (!fs.existsSync(fullPath)) {
+        console.error('文件不存在:', fullPath);
+        return res.status(404).json({ error: '文件不存在' });
+    }
+    
+    try {
+        // 根据文件扩展名设置正确的 Content-Type
+        const ext = path.extname(fullPath).toLowerCase();
+        if (ext === '.json') {
+            res.setHeader('Content-Type', 'application/json');
+            const content = fs.readFileSync(fullPath, 'utf-8');
+            res.send(content);
+        } else if (ext === '.md') {
+            res.setHeader('Content-Type', 'text/plain');
+            const content = fs.readFileSync(fullPath, 'utf-8');
+            res.send(content);
+        } else {
+            res.sendFile(fullPath);
+        }
+    } catch (error) {
+        console.error('读取文件时出错:', error);
+        res.status(500).json({ error: '读取文件时出错' });
     }
 });
 
