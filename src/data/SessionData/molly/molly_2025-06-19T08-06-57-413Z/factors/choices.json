@@ -1,0 +1,23 @@
+[
+  {
+    "id": "relationship_type",
+    "title": "Relationship type",
+    "options": [
+      "Supervisor and Student"
+    ]
+  },
+  {
+    "id": "familiarity",
+    "title": "Familiarity",
+    "options": [
+      "Familiar"
+    ]
+  },
+  {
+    "id": "occasion",
+    "title": "Occasion",
+    "options": [
+      "Formal: Academic or Professional Context"
+    ]
+  }
+]
