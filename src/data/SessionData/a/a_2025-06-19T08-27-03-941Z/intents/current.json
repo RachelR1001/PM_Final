@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Tone",
+    "value": "Polite and respectful"
+  },
+  {
+    "dimension": "Purpose",
+    "value": "Express gratitude for guidance/support"
+  },
+  {
+    "dimension": "Level of Formality",
+    "value": "Moderately formal"
+  },
+  {
+    "dimension": "Specificity of Appreciation",
+    "value": "Mention specific instances of help"
+  },
+  {
+    "dimension": "Call to Action",
+    "value": "Optional request for future guidance"
+  }
+]

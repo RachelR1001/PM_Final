@@ -36,9 +36,6 @@ const FirstPage = () => {
         console.log('userInput:', userInput); // 检查 userInput 是否有值
         console.log('userName:', userName); // 检查 userName 是否有值
         if (userInput.trim() !== '' && userName.trim() !== '') {
-            // 生成 taskId
-            const taskId = `${userName}_${new Date().toISOString().replace(/[:.]/g, '-')}`;
-
             // 添加用户消息到消息列表
             setMessages(prevMessages => [
                 ...prevMessages,
@@ -53,22 +50,26 @@ const FirstPage = () => {
             ]);
 
             try {
-                // 调用后端 API 创建 Session 数据
+                // 调用后端 API 创建 Session 数据（后端会生成 taskId）
                 const response = await axios.post('http://localhost:3001/create-session', {
                     userName,
                     userInput,
-                    taskId, // 传递 taskId
                 });
                 console.log('Session 数据创建成功:', response.data);
+                
+                // 从后端响应中获取 taskId
+                const taskId = response.data.taskId;
+                console.log('Generated taskId:', taskId);
+
+                setIsAnalyzing(true);
+                setTimeout(() => {
+                    setIsAnalyzing(false);
+                    navigate('/second', { state: { userTask: userInput, userName, taskId } }); // 传递从后端获取的 taskId
+                }, 5000); // 模拟分析时间为 5 秒
             } catch (error) {
                 console.error('创建 Session 数据时出错:', error);
-            }
-
-            setIsAnalyzing(true);
-            setTimeout(() => {
                 setIsAnalyzing(false);
-                navigate('/second', { state: { userTask: userInput, userName, taskId } }); // 传递 taskId
-            }, 5000); // 模拟分析时间为 5 秒
+            }
         } else {
             console.error('userInput 或 userName 为空，无法发送');
         }

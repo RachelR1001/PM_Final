@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { createEditor, Editor, Transforms, Text } from 'slate';
 import { Slate, Editable, withReact, useSlate } from 'slate-react';
-import { Row, Col, Card, Typography, Tag } from 'antd';
+import { Row, Col, Card, Typography, Tag, Menu, Dropdown, Modal, Radio, message } from 'antd';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 
@@ -160,6 +160,168 @@ const ThirdPage = () => {
     const [value, setValue] = useState(initialValue);
     const [loading, setLoading] = useState(true);
     const [contentLoaded, setContentLoaded] = useState(false);
+    const [selectedText, setSelectedText] = useState('');
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    const [variationOptions, setVariationOptions] = useState([]);
+    const [selectedOption, setSelectedOption] = useState(null);
+
+    // Function to handle right-click
+    const handleContextMenu = (event) => {
+        event.preventDefault();
+
+        // Get the selected text
+        const selection = window.getSelection();
+        const selectedText = selection.toString();
+
+        if (selectedText) {
+            setSelectedText(selectedText);
+        }
+    };
+
+    // Menu for the context menu
+    const menu = (
+        <Menu
+            onClick={({ key }) => handleMenuClick(key)}
+            items={[
+                { key: 'Variation Maker', label: 'Variation Maker' },
+                { key: 'Direct-Rewrite Agent', label: 'Direct-Rewrite Agent' },
+                { key: 'Selective Aspect Rewriter', label: 'Selective Aspect Rewriter' },
+            ]}
+        />
+    );
+
+    // Function to handle menu option clicks
+    const handleMenuClick = async (option) => {
+        if (option === 'Variation Maker') {
+            // Show the modal
+            setIsModalVisible(true);
+
+            // Validate and prepare the data for the prompt
+            if (!value || !Array.isArray(value) || value.length === 0) {
+                message.error('Editor content is invalid or empty.');
+                return;
+            }
+
+            const draftLatest = value
+                .map((node) => {
+                    try {
+                        return Editor.string(editor, [node]);
+                    } catch (error) {
+                        console.error('Error processing node:', node, error);
+                        return '';
+                    }
+                })
+                .join('\n\n');
+
+            const factorChoices = getFactorChoices();
+            const intentCurrent = getIntentCurrent();
+
+            try {
+                const response = await axios.post('http://localhost:3001/variation-maker', {
+                    draftLatest,
+                    factorChoices,
+                    intentCurrent,
+                    selectedContent: selectedText,
+                });
+
+                if (response.data && response.data.variations) {
+                    // Parse the variations to remove unnecessary characters
+                    const rawVariations = response.data.variations;
+                    const parsedVariations = rawVariations
+                        .filter((line) => 
+                            line.trim() && // Remove empty lines
+                            !line.startsWith('```') && // Remove markdown artifacts
+                            line.trim() !== '[' && // Remove opening bracket
+                            line.trim() !== ']' // Remove closing bracket
+                        )
+                        .map((line) => line.replace(/^[\s"']+|[\s"']+$/g, '')); // Trim quotes and whitespace
+
+                    setVariationOptions(parsedVariations);
+                } else {
+                    message.error('Failed to fetch variations. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error fetching variations:', error);
+                message.error('Error fetching variations. Please try again.');
+            }
+        }
+    };
+
+    // Function to get factor choices (mocked for now)
+    const getFactorChoices = () => {
+        return [
+            {
+                id: 'relationship_type',
+                title: 'Relationship type',
+                options: ['Supervisor and Student'],
+            },
+        ];
+    };
+
+    // Function to get intent current (mocked for now)
+    const getIntentCurrent = () => {
+        return [
+            { dimension: 'directness', value: 'explicit' },
+            { dimension: 'urgency', value: 'same-day' },
+        ];
+    };
+
+    // Function to handle modal confirm
+    const handleModalConfirm = async () => {
+        if (!selectedOption) {
+            message.error('Please select a variation before confirming.');
+            return;
+        }
+
+        // Replace the selected text in the editor
+        const { selection } = editor;
+        if (selection) {
+            Transforms.insertText(editor, selectedOption, { at: selection });
+        }
+
+        // Validate and prepare the updated content
+        if (!value || !Array.isArray(value) || value.length === 0) {
+            message.error('Editor content is invalid or empty.');
+            return;
+        }
+
+        const updatedContent = value
+            .map((node) => {
+                try {
+                    return Editor.string(editor, [node]);
+                } catch (error) {
+                    console.error('Error processing node:', node, error);
+                    return '';
+                }
+            })
+            .join('\n\n');
+
+        // Save the updated content to latest.md
+        try {
+            await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
+                content: updatedContent,
+            });
+            message.success('Content saved successfully.');
+        } catch (error) {
+            console.error('Error saving content:', error);
+            message.error('Failed to save content. Please try again.');
+        }
+
+        // Close the modal
+        handleModalClose();
+    };
+
+    // Function to handle modal close
+    const handleModalClose = () => {
+        setIsModalVisible(false);
+        setVariationOptions([]);
+        setSelectedOption(null);
+    };
+
+    // Function to handle radio selection
+    const handleOptionChange = (e) => {
+        setSelectedOption(e.target.value);
+    };
 
     // 动态加载草稿内容
     useEffect(() => {
@@ -276,7 +438,10 @@ const ThirdPage = () => {
     };
 
     return (
-        <div style={{ padding: '16px', background: '#f5f5f5', minHeight: '100vh' }}>
+        <div
+            style={{ padding: '16px', background: '#f5f5f5', minHeight: '100vh' }}
+            onContextMenu={handleContextMenu}
+        >
             <Row gutter={16}>
                 {/* 左侧信息面板 - 4份 */}
                 <Col span={4}>
@@ -314,8 +479,8 @@ const ThirdPage = () => {
                                 wordBreak: 'break-word'
                             }}>
                                 {userTask || 'No task description available'}
-                            </div>
                         </div>
+                    </div>
                     </Card>
                 </Col>
                 
@@ -330,29 +495,30 @@ const ThirdPage = () => {
                         bodyStyle={{ padding: 0 }}
                     >
                         {contentLoaded ? (
-                            <div style={{
-                                background: '#fff',
-                                overflow: 'hidden',
-                            }}>
-                                <Slate
-                                    editor={editor}
-                                    initialValue={value}
-                                    onValueChange={(newValue) => setValue(newValue)}
-                                >
-                                    <Toolbar />
-                                    <Editable
-                                        renderElement={renderElement}
-                                        renderLeaf={renderLeaf}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder={loading ? 'Loading...' : 'Start typing...'}
-                                        style={{
-                                            padding: '16px',
-                                            minHeight: '500px',
-                                            outline: 'none',
-                                        }}
-                                    />
-                                </Slate>
-                            </div>
+                            <Dropdown overlay={menu} trigger={['contextMenu']}>
+                                <div style={{
+                                    background: '#fff',
+                                    overflow: 'hidden',
+                                }}>
+                                    <Slate
+                                        editor={editor}
+                                        initialValue={value}
+                                        onChange={(newValue) => setValue(newValue)}
+                                    >
+                                        <Editable
+                                            renderElement={renderElement}
+                                            renderLeaf={renderLeaf}
+                                            onKeyDown={handleKeyDown}
+                                            placeholder={loading ? 'Loading...' : 'Start typing...'}
+                                            style={{
+                                                padding: '16px',
+                                                minHeight: '500px',
+                                                outline: 'none',
+                                            }}
+                                        />
+                                    </Slate>
+                        </div>
+                            </Dropdown>
                         ) : (
                             <div
                                 style={{
@@ -366,11 +532,31 @@ const ThirdPage = () => {
                                 }}
                             >
                                 Loading content...
-                            </div>
-                        )}
+                        </div>
+                    )}
                     </Card>
                 </Col>
             </Row>
+
+            {/* Modal for Variation Maker */}
+            <Modal
+                title="Variation Maker"
+                visible={isModalVisible}
+                onCancel={handleModalClose}
+                onOk={handleModalConfirm}
+                okText="Confirm"
+                cancelText="Cancel"
+                okButtonProps={{ disabled: !selectedOption }}
+            >
+                <p><strong>Selected Content:</strong> {selectedText}</p>
+                <Radio.Group onChange={handleOptionChange} value={selectedOption}>
+                    {variationOptions.map((option, index) => (
+                        <Radio key={index} value={option}>
+                            {option}
+                        </Radio>
+                    ))}
+                </Radio.Group>
+            </Modal>
         </div>
     );
 };
@@ -421,4 +607,4 @@ const isBlockActive = (editor, format) => {
     return !!match;
 };
 
-export default ThirdPage;
+export default ThirdPage;    

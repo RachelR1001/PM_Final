@@ -92,7 +92,6 @@ ${finalEmail}
     }
 });
 
-
 app.post('/rank-and-revise-factors', async (req, res) => {
     const { userTask } = req.body;
 
@@ -115,9 +114,9 @@ app.post('/rank-and-revise-factors', async (req, res) => {
     const prompt = promptTemplate
         .replace('{{USER_TASK}}', userTask)
         .replace('{{FACTOR_LIST}}', JSON.stringify(factorList, null, 2));
-
+  
     try {
-        const response = await sendRequestToDeepSeek(prompt);
+      const response = await sendRequestToDeepSeek(prompt);
         if (!response.choices || response.choices.length === 0) {
             return res.status(500).json({ error: 'DeepSeek 响应为空' });
         }
@@ -199,7 +198,7 @@ app.post('/generate-snippet', async (req, res) => {
     }
 });
 
-// 修复后的创建会话接口 - 只在FirstPage调用
+// 创建会话接口 - 只在FirstPage调用
 app.post('/create-session', (req, res) => {
     const { userName, userInput } = req.body;
 
@@ -266,7 +265,7 @@ app.post('/create-session', (req, res) => {
     }
 });
 
-// 修复后的保存factor choices接口
+// 保存factor choices接口 - 修复重复定义问题
 app.post('/save-factor-choices', (req, res) => {
     const { userName, factorChoices, taskId } = req.body;
 
@@ -274,7 +273,7 @@ app.post('/save-factor-choices', (req, res) => {
         return res.status(400).json({ error: 'userName、factorChoices 和 taskId 是必需的' });
     }
 
-    // 使用传入的taskId，而不是创建新的
+    // 使用传入的taskId构建路径
     const factorChoicesPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'factors', 'choices.json');
 
     try {
@@ -282,29 +281,6 @@ app.post('/save-factor-choices', (req, res) => {
         const factorsDir = path.dirname(factorChoicesPath);
         if (!fs.existsSync(factorsDir)) {
             fs.mkdirSync(factorsDir, { recursive: true });
-        }
-
-        fs.writeFileSync(factorChoicesPath, JSON.stringify(factorChoices, null, 2));
-        res.status(200).json({ message: 'Factor choices saved successfully' });
-    } catch (error) {
-        console.error('Error saving factor choices:', error);
-        res.status(500).json({ error: 'Error saving factor choices' });
-    }
-});
-
-app.post('/save-factor-choices', (req, res) => {
-    const { userName, factorChoices, taskId } = req.body;
-
-    if (!userName || !factorChoices || !taskId) {
-        return res.status(400).json({ error: 'userName、factorChoices 和 taskId 是必需的' });
-    }
-
-    const factorsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'factors');
-    const factorChoicesPath = path.join(factorsPath, 'choices.json');
-
-    try {
-        if (!fs.existsSync(factorsPath)) {
-            fs.mkdirSync(factorsPath, { recursive: true });
         }
 
         fs.writeFileSync(factorChoicesPath, JSON.stringify(factorChoices, null, 2));
@@ -336,6 +312,7 @@ app.post('/analyze-intent', async (req, res) => {
         .replace('{{USER_TASK}}', userTask)
         .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2));
 
+    // 使用传入的taskId构建路径
     const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
 
     try {
@@ -351,6 +328,7 @@ app.post('/analyze-intent', async (req, res) => {
 
         const parsedData = JSON.parse(jsonContent);
 
+        // 确保目录存在
         if (!fs.existsSync(path.dirname(intentsPath))) {
             fs.mkdirSync(path.dirname(intentsPath), { recursive: true });
         }
@@ -385,7 +363,9 @@ app.post('/generate-first-draft', async (req, res) => {
         .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
         .replace('{{INTENT_CURRENT}}', JSON.stringify(intents, null, 2));
 
-    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
+    // 使用传入的taskId构建路径，并按照要求命名为 00_first.md
+    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', '00_first.md');
+    const latestPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
 
     try {
         const response = await sendRequestToDeepSeek(prompt);
@@ -397,10 +377,14 @@ app.post('/generate-first-draft', async (req, res) => {
 
         const draftContent = response.choices[0].message.content.trim();
 
+        // 确保目录存在
         if (!fs.existsSync(path.dirname(draftsPath))) {
             fs.mkdirSync(path.dirname(draftsPath), { recursive: true });
         }
+        
+        // 保存为 00_first.md 和 latest.md
         fs.writeFileSync(draftsPath, draftContent);
+        fs.writeFileSync(latestPath, draftContent);
 
         res.json({ draft: draftContent });
     } catch (error) {
@@ -444,6 +428,68 @@ app.get('/sessiondata/:taskId/*', (req, res) => {
     } catch (error) {
         console.error('读取文件时出错:', error);
         res.status(500).json({ error: '读取文件时出错' });
+    }
+});
+
+app.post('/variation-maker', async (req, res) => {
+    const { draftLatest, factorChoices, intentCurrent, selectedContent } = req.body;
+
+    if (!draftLatest || !factorChoices || !intentCurrent || !selectedContent) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/variation_maker_prompt.md');
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load variation_maker_prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    // Replace placeholders in the prompt
+    const prompt = promptTemplate
+        .replace('{{Draft_LATEST}}', draftLatest)
+        .replace('{{factor_choices}}', JSON.stringify(factorChoices, null, 2))
+        .replace('{{intent_current}}', JSON.stringify(intentCurrent, null, 2))
+        .replace('{{selected_content}}', selectedContent);
+
+    try {
+        const response = await sendRequestToDeepSeek(prompt);
+
+        if (!response.choices || response.choices.length === 0) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        // Parse the response to extract variations
+        const rawContent = response.choices[0].message.content.trim();
+        const variations = rawContent.split('\n').filter((line) => line.trim() !== '');
+
+        res.json({ variations });
+    } catch (error) {
+        console.error('Error in Variation Maker:', error);
+        res.status(500).json({ error: 'Error in Variation Maker' });
+    }
+});
+
+app.post('/sessiondata/:taskId/drafts/latest.md', (req, res) => {
+    const { taskId } = req.params;
+    const { content } = req.body;
+
+    if (!content) {
+        return res.status(400).json({ error: 'Content is required' });
+    }
+
+    // Extract the username from the taskId
+    const userName = taskId.split('_')[0];
+    const filePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
+
+    try {
+        fs.writeFileSync(filePath, content, 'utf-8');
+        res.status(200).json({ message: 'Content saved successfully.' });
+    } catch (error) {
+        console.error('Error saving content to latest.md:', error);
+        res.status(500).json({ error: 'Failed to save content.' });
     }
 });
 

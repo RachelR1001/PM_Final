@@ -203,7 +203,7 @@ const SecondPage = () => {
                                 onClick={handleGenerateEmail}
                             >
                                 Generate Email
-                            </Button>
+                                </Button>
                         </div>
 
                         {/* 下半部分卡片网格系统 */}
@@ -236,7 +236,7 @@ const SecondPage = () => {
                                                             {factor.title}
                                                         </div>
                                                         <Tag color={tagInfo.color}>{tagInfo.text}</Tag>
-                                                    </div>
+                            </div>
                                                 }
                                             >
                                                 <Radio.Group
@@ -271,8 +271,8 @@ const SecondPage = () => {
                     </Col>
                 </Row>
             </div>
-        </Spin>
+            </Spin>
     );
 };
 
-export default SecondPage;
+export default SecondPage;    
