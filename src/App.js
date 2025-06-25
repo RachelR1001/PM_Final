@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import FirstPage from './pages/FirstPage';
 import SecondPage from './pages/SecondPage';
 import ThirdPage from './pages/ThirdPage';
+import FourthPage from './pages/AnchorBuilder';
 import 'antd/dist/reset.css';
 import './App.css'; // 引入自定义CSS文件
 import logoImg from './Logo.png'; // 引入图片
@@ -25,6 +26,8 @@ const App = () => {
                 return '2';
             case '/third':
                 return '3';
+            case '/fourth': 
+                return '4';
             default:
                 return '1';
         }
@@ -55,6 +58,10 @@ const App = () => {
                                     key: '3',
                                     label: <Link to="/third">Final Email</Link>,
                                 },
+                                {
+                                    key: '4',
+                                    label: <Link to="/forth">Anchor Builder</Link>,
+                                },
                             ]}
                         />
                     </div>
@@ -72,6 +79,7 @@ const App = () => {
                         <Route path="/" element={<FirstPage />} />
                         <Route path="/second" element={<SecondPage />} />
                         <Route path="/third" element={<ThirdPage />} />
+                        <Route path="/fourth" element={<FourthPage />} />
                     </Routes>
                 </Content>
                 <Footer className="footer">Persona Mail Prototype @Synteraction Lab</Footer>

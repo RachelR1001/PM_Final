@@ -3,7 +3,7 @@ import { createEditor, Editor, Transforms, Text } from 'slate';
 import { Slate, Editable, withReact, useSlate } from 'slate-react';
 import { Row, Col, Card, Typography, Tag, Menu, Dropdown, Modal, Radio, message, Spin } from 'antd';
 import axios from 'axios';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const { Title, Text: AntText } = Typography;
 
@@ -225,6 +225,7 @@ const Toolbar = () => {
 
 const ThirdPage = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const { userName, userTask, taskId } = location.state || {};
 
     const editor = useMemo(() => withReact(createEditor()), []);
@@ -249,6 +250,7 @@ const ThirdPage = () => {
     const [manualInstruction, setManualInstruction] = useState('');
     const [rewrittenVersion, setRewrittenVersion] = useState('');
     const [isLoadingRewrittenVersion, setIsLoadingRewrittenVersion] = useState(false);
+    const [intents, setIntents] = useState([]);
 
     // Function to handle right-click
     const handleContextMenu = (event) => {
@@ -405,7 +407,7 @@ const ThirdPage = () => {
                         if (Editor.string(editor, selection) === selectedText) {
                             Transforms.delete(editor, { at: selection });
                             Transforms.insertText(editor, selectedOption, { at: selection.anchor });
-                        } else {
+                                } else {
                             Transforms.insertText(editor, selectedOption);
                         }
                     } catch (transformError) {
@@ -475,6 +477,24 @@ const ThirdPage = () => {
             setIsLoadingRewrittenVersion(false);
         }
     };
+
+    // Function to fetch intents from current.json
+    const fetchIntents = async () => {
+        try {
+            const response = await axios.get(`http://localhost:3001/sessiondata/${taskId}/intents/current.json`);
+            setIntents(response.data || []); // Set the fetched intents
+        } catch (error) {
+            console.error('Error fetching intents:', error);
+            message.error('Failed to fetch intents. Please try again.');
+        }
+    };
+
+    // Fetch intents when the component mounts or taskId changes
+    useEffect(() => {
+        if (taskId) {
+            fetchIntents();
+        }
+    }, [taskId]);
 
     // 动态加载草稿内容
     useEffect(() => {
@@ -590,62 +610,201 @@ const ThirdPage = () => {
         }
     };
 
+    // Function to save the content to latest.md
+    const handleSave = async () => {
+        const draftLatest = value
+            .map((node) => getNodeText(editor, node))
+            .filter((text) => text.trim())
+            .join('\n\n');
+
+        try {
+            await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
+                content: draftLatest,
+            });
+            message.success('Draft saved successfully.');
+        } catch (error) {
+            console.error('Error saving draft:', error);
+            message.error('Failed to save draft. Please try again.');
+        }
+    };
+
+    // Function to save and navigate to Anchor Builder
+    const handleSaveAndGenerateTemplate = async () => {
+        const draftLatest = value
+            .map((node) => getNodeText(editor, node))
+            .filter((text) => text.trim())
+            .join('\n\n');
+
+        try {
+            // Save the draft
+            await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
+                content: draftLatest,
+            });
+            message.success('Draft saved successfully.');
+
+            // Navigate to Anchor Builder
+            navigate('/fourth', { state: { userName, taskId, userTask } });
+        } catch (error) {
+            console.error('Error saving draft and navigating:', error);
+            message.error('Failed to save draft or navigate. Please try again.');
+        }
+    };
+
     return (
         <div
-            style={{ padding: '16px', background: '#f5f5f5', minHeight: '100vh' }}
-            onContextMenu={handleContextMenu}
+            style={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100vh', // Full viewport height
+                background: '#f5f5f5',
+            }}
         >
-            <Row gutter={16}>
-                {/* 左侧信息面板 - 4份 */}
-                <Col span={4}>
-                    <Card 
-                        title="Task Information" 
+            {/* Main Content */}
+            <div
+                style={{
+                    flex: 1, // Take up remaining space
+                    overflow: 'hidden', // Prevent overflow
+                    display: 'flex',
+                    flexDirection: 'row',
+                    padding: '16px',
+                }}
+            >
+                {/* Left-side information panel - 4 columns */}
+                <div
+                    style={{
+                        flex: '0 0 25%', // Fixed width for the left panel
+                        paddingRight: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '16px',
+                    }}
+                >
+                    <Card
+                        title="Task Information"
                         size="small"
-                        style={{ 
+                        style={{
+                            flex: '1 1 auto', // Allow resizing
                             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                            height: 'fit-content'
+                        }}
+                        bodyStyle={{
+                            overflowY: 'auto', // Enable scrolling
+                            maxHeight: 'calc(100vh - 200px)', // Adjust height for footer
                         }}
                     >
                         <div style={{ marginBottom: '16px' }}>
-                            <AntText strong>User Name:</AntText>
+                            <Typography.Text strong>User Name:</Typography.Text>
                             <div style={{ marginTop: '4px' }}>
                                 <Tag color="blue">{userName || 'N/A'}</Tag>
                             </div>
                         </div>
-                        
+
                         <div style={{ marginBottom: '16px' }}>
-                            <AntText strong>Task ID:</AntText>
+                            <Typography.Text strong>Task ID:</Typography.Text>
                             <div style={{ marginTop: '4px' }}>
                                 <Tag color="green">{taskId || 'N/A'}</Tag>
                             </div>
                         </div>
-                        
+
                         <div>
-                            <AntText strong>User Task:</AntText>
-                            <div style={{ 
-                                marginTop: '8px',
-                                padding: '12px',
-                                background: '#f8f9fa',
-                                borderRadius: '6px',
-                                fontSize: '14px',
-                                lineHeight: '1.5',
-                                wordBreak: 'break-word'
-                            }}>
+                            <Typography.Text strong>User Task:</Typography.Text>
+                            <div
+                                style={{
+                                    marginTop: '8px',
+                                    padding: '12px',
+                                    background: '#f8f9fa',
+                                    borderRadius: '6px',
+                                    fontSize: '14px',
+                                    lineHeight: '1.5',
+                                    wordBreak: 'break-word',
+                                }}
+                            >
                                 {userTask || 'No task description available'}
+                            </div>
                         </div>
-                    </div>
                     </Card>
-                </Col>
-                
-                {/* 右侧编辑器 - 20份 */}
-                <Col span={20}>
-                    <Card 
-                        title="Email Draft Editor" 
+
+                    {/* New Intent Analyzer Card */}
+                    <Card
+                        title="Intent Analyzer"
                         size="small"
-                        style={{ 
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        style={{
+                            marginTop: '16px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            height: '300px', // Fixed height
+                            overflow: 'hidden', // Hide overflow
                         }}
-                        bodyStyle={{ padding: 0 }}
+                        bodyStyle={{
+                            padding: '12px',
+                            overflowY: 'auto', // Enable vertical scrolling
+                            height: 'calc(100% - 48px)', // Adjust for card header
+                        }}
+                    >
+                        {intents.length > 0 ? (
+                            <ul style={{ paddingLeft: '16px', margin: 0 }}>
+                                {intents.map((intent, index) => (
+                                    <li key={index} style={{ marginBottom: '8px', wordBreak: 'break-word' }}>
+                                        <strong>{intent.dimension}:</strong> {intent.value}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p style={{ color: '#999', textAlign: 'center' }}>No intents available.</p>
+                        )}
+                    </Card>
+                </div>
+                
+                {/* Right-side editor - 20 columns */}
+                <div
+                    style={{
+                        flex: '1 1 75%', // Take up remaining space
+                        display: 'flex',
+                        flexDirection: 'column',
+                    }}
+                >
+                    <Card
+                        title={
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>Email Draft Editor</span>
+                                <div>
+                                    <button
+                                        onClick={handleSave}
+                                        style={{
+                                            padding: '4px 8px',
+                                            background: '#1890ff',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer',
+                                            marginRight: '8px',
+                                        }}
+                                    >
+                                        Save
+                                    </button>
+                                    <button
+                                        onClick={handleSaveAndGenerateTemplate}
+                                        style={{
+                                            padding: '4px 8px',
+                                            background: '#52c41a',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        Save and Generate Template
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        size="small"
+                        style={{
+                            flex: '1 1 auto', // Allow resizing
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        }}
+                        bodyStyle={{
+                            overflowY: 'auto', // Enable scrolling
+                            maxHeight: 'calc(100vh - 200px)', // Adjust height for footer
+                        }}
                     >
                         {contentLoaded ? (
                             <Dropdown overlay={menu} trigger={['contextMenu']}>
@@ -674,7 +833,7 @@ const ThirdPage = () => {
                                             }}
                                         />
                                     </Slate>
-                                </div>
+                        </div>
                             </Dropdown>
                         ) : (
                             <div
@@ -692,8 +851,22 @@ const ThirdPage = () => {
                         </div>
                     )}
                     </Card>
-                </Col>
-            </Row>
+                </div>
+            </div>
+
+            {/* Footer */}
+            <div
+                style={{
+                    height: '60px', // Fixed footer height
+                    background: '#f0f0f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderTop: '1px solid #d9d9d9',
+                }}
+            >
+                <p style={{ margin: 0, color: '#999' }}>© 2025 Email Writing Assistant</p>
+            </div>
 
             {/* Modal for Variation Maker */}
             <Modal
@@ -746,7 +919,114 @@ const ThirdPage = () => {
                 title="Direct Rewriter Agent"
                 visible={isDirectRewriterModalVisible}
                 onCancel={() => setIsDirectRewriterModalVisible(false)}
-                footer={null}
+                footer={[
+                    <button
+                        key="cancel"
+                        onClick={() => setIsDirectRewriterModalVisible(false)}
+                        style={{
+                            padding: '8px 16px',
+                            background: '#f5f5f5',
+                            color: '#000',
+                            border: '1px solid #d9d9d9',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            marginRight: '8px',
+                        }}
+                    >
+                        Cancel
+                    </button>,
+                    <button
+                        key="confirm"
+                        onClick={async () => {
+                            if (!rewrittenVersion.trim()) {
+                                message.error('No rewritten version available to confirm.');
+                                return;
+                            }
+
+                            setIsLoadingRewrittenVersion(true);
+
+                            try {
+                                // Fetch real data for factor choices and current intents
+                                const factorChoices = await getFactorChoices();
+                                const intentCurrent = await getIntentCurrent();
+
+                                // Get the current editor content
+                                const draftLatest = value
+                                    .map((node) => getNodeText(editor, node))
+                                    .filter((text) => text.trim())
+                                    .join('\n\n');
+
+                                // Prepare the data for the request
+                                const requestData = {
+                                    draftLatest,
+                                    factorChoices,
+                                    intentCurrent,
+                                    selectedContent: selectedText,
+                                    manualInstruction,
+                                    userName,
+                                    taskId,
+                                };
+
+                                console.log('Sending request to /rewrite-intent with data:', requestData);
+
+                                // Send the request to the server
+                                const response = await axios.post('http://localhost:3001/rewrite-intent', requestData);
+
+                                if (response.data && response.data.updatedIntents) {
+                                    message.success('Intents updated successfully.');
+                                    console.log('Updated intents:', response.data.updatedIntents);
+
+                                    // Replace the selected text with the rewritten version in the editor
+                                    const { selection } = editor;
+                                    if (selection && selectedText) {
+                                        try {
+                                            if (Editor.string(editor, selection) === selectedText) {
+                                                Transforms.delete(editor, { at: selection });
+                                                Transforms.insertText(editor, rewrittenVersion, { at: selection.anchor });
+                                            } else {
+                                                Transforms.insertText(editor, rewrittenVersion);
+                                            }
+                                        } catch (transformError) {
+                                            console.warn('Error replacing text in editor:', transformError);
+                                            Transforms.insertText(editor, rewrittenVersion); // Fallback
+                                        }
+                                    }
+
+                                    // Update latest.md with the new content
+                                    const updatedDraft = value
+                                        .map((node) => getNodeText(editor, node))
+                                        .filter((text) => text.trim())
+                                        .join('\n\n');
+
+                                    await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
+                                        content: updatedDraft,
+                                    });
+
+                                    message.success('Latest draft updated successfully.');
+                                } else {
+                                    message.error('Failed to update intents. Please try again.');
+                                }
+                            } catch (error) {
+                                console.error('Error during confirm action:', error);
+                                message.error('An error occurred. Please try again.');
+                            } finally {
+                                setIsLoadingRewrittenVersion(false);
+                                setIsDirectRewriterModalVisible(false);
+                            }
+                        }}
+                        style={{
+                            padding: '8px 16px',
+                            background: '#52c41a',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                        }}
+                        disabled={!rewrittenVersion.trim()}
+                    >
+                        Confirm
+                    </button>,
+                ]}
                 width={{
                     xs: '90%',
                     sm: '80%',
@@ -772,7 +1052,7 @@ const ThirdPage = () => {
                             borderRadius: '4px',
                         }}
                     />
-                </div>
+                        </div>
                 <button
                     onClick={handleRewrite}
                     style={{
@@ -787,7 +1067,7 @@ const ThirdPage = () => {
                 >
                     Rewrite
                 </button>
-                <div>
+                            <div>
                     <strong>Rewritten Version:</strong>
                     {isLoadingRewrittenVersion ? (
                         <Spin tip="Loading rewritten version..." />
@@ -803,12 +1083,12 @@ const ThirdPage = () => {
                             }}
                         >
                             {rewrittenVersion || 'No rewritten version available.'}
-                        </div>
-                    )}
-                </div>
+                            </div>
+                        )}
+                    </div>
             </Modal>
         </div>
     );
 };
 
-export default ThirdPage;
+export default ThirdPage;    

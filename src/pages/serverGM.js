@@ -700,40 +700,163 @@ app.post('/sessiondata/:taskId/drafts/latest.md', (req, res) => {
 });
 
 app.post('/direct-rewriter', async (req, res) => {
-    const { draftLatest, factorChoices, intentCurrent, selectedContent, manualInstruction } = req.body;
+    const {
+        draftLatest,
+        factorChoices,
+        intentCurrent,
+        selectedContent,
+        manualInstruction,
+        userName,
+        taskId,
+    } = req.body;
 
     if (!draftLatest || !factorChoices || !intentCurrent || !selectedContent || !manualInstruction) {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/direct_revision_intent_analyzer_prompt.md');
+    const promptPath = path.join(__dirname, '../data/Prompts/prompt_AI_rewrite.prompt.md');
     let promptTemplate;
     try {
+        // Load the prompt template
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
     } catch (error) {
-        console.error('Failed to load direct_revision_intent_analyzer_prompt.md:', error);
+        console.error('Failed to load prompt_AI_rewrite.prompt.md:', error);
         return res.status(500).json({ error: 'Failed to load prompt template' });
     }
 
+    // Replace placeholders in the prompt with real data
     const prompt = promptTemplate
         .replace('{{USER_TASK}}', draftLatest)
         .replace('{{DRAFT_LATEST}}', draftLatest)
+        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
         .replace('{{SELECTED_CONTENT}}', selectedContent)
-        .replace('{{LOCALIZED_REVISED_CONTENT}}', manualInstruction)
-        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2));
+        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2))
+        .replace('{{USER_PROMPT}}', manualInstruction);
 
     try {
-        // Removed thinking budget - use default (disabled)
+        // Send the prompt to the AI service
         const rewrittenVersion = await sendRequestToGemini(prompt);
 
         if (!rewrittenVersion) {
             return res.status(500).json({ error: 'AI response is empty' });
         }
 
+        // Return the rewritten version to the client
         res.json({ rewrittenVersion: rewrittenVersion.trim() });
     } catch (error) {
         console.error('Error in Direct Rewriter:', error);
-        res.status(500).json({ error: 'Error in Direct Rewriter' });
+        res.status(500).json({ error: 'Error in Direct Rewriter: ' + error.message });
+    }
+});
+
+app.post('/rewrite-intent', async (req, res) => {
+    const {
+        draftLatest,
+        factorChoices,
+        intentCurrent,
+        selectedContent,
+        manualInstruction,
+        userName,
+        taskId,
+    } = req.body;
+
+    if (!draftLatest || !factorChoices || !intentCurrent || !selectedContent || !manualInstruction || !userName || !taskId) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/prompt_AI_rewrite.prompt.md');
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load prompt_AI_rewrite.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    // Replace placeholders in the prompt with real data
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', draftLatest)
+        .replace('{{DRAFT_LATEST}}', draftLatest)
+        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
+        .replace('{{SELECTED_CONTENT}}', selectedContent)
+        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2))
+        .replace('{{USER_PROMPT}}', manualInstruction);
+
+    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+    const historyPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'history.json');
+
+    try {
+        // Send the prompt to the AI service
+        const responseText = await sendRequestToGemini(prompt, { enableThinking: true });
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        console.log('Raw AI Response:', responseText);
+
+        let parsedData;
+        try {
+            const jsonContent = responseText.replace(/```json|```/g, ''); // Remove Markdown formatting
+            parsedData = JSON.parse(jsonContent);
+        } catch (error) {
+            console.warn('AI response is not valid JSON. Using plain text response instead.');
+            parsedData = [{ action: 'add', next: { dimension: 'custom', value: responseText.trim() } }];
+        }
+
+        // Read the current intents
+        let currentIntents = [];
+        if (fs.existsSync(intentsPath)) {
+            try {
+                currentIntents = JSON.parse(fs.readFileSync(intentsPath, 'utf-8'));
+            } catch (error) {
+                console.error('Error reading current intents:', error);
+            }
+        }
+
+        // Apply the AI's edit instructions and save history
+        if (Array.isArray(parsedData)) {
+            parsedData.forEach((instruction) => {
+                const { action, prev, next } = instruction;
+
+                // Log the change to history.json
+                saveIntentHistory(
+                    userName,
+                    taskId,
+                    action,
+                    prev,
+                    next,
+                    'AI › RewriteIntentAnalyzer v1',
+                    'AI'
+                );
+
+                if (action === 'add') {
+                    currentIntents.push(next);
+                } else if (action === 'remove') {
+                    currentIntents = currentIntents.filter(
+                        (intent) => !(intent.dimension === prev.dimension && intent.value === prev.value)
+                    );
+                } else if (action === 'change') {
+                    currentIntents = currentIntents.map((intent) =>
+                        intent.dimension === prev.dimension && intent.value === prev.value ? next : intent
+                    );
+                }
+            });
+        }
+
+        // Ensure the directory exists
+        const intentsDir = path.dirname(intentsPath);
+        if (!fs.existsSync(intentsDir)) {
+            fs.mkdirSync(intentsDir, { recursive: true });
+        }
+
+        // Save the updated intents
+        fs.writeFileSync(intentsPath, JSON.stringify(currentIntents, null, 2));
+
+        res.json({ updatedIntents: currentIntents });
+    } catch (error) {
+        console.error('Error in Rewrite Intent:', error);
+        res.status(500).json({ error: 'Error in Rewrite Intent: ' + error.message });
     }
 });
 
