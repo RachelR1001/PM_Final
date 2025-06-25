@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Specific Academic Topic",
+    "value": "Likely related to research, thesis, or specific project under supervision"
+  },
+  {
+    "dimension": "Primary Communication Purpose",
+    "value": "To inform, request a specific action/meeting, or seek specific guidance"
+  },
+  {
+    "dimension": "Expected Level of Detail",
+    "value": "Sufficient to convey progress, problem, or request clearly without excessive informality"
+  },
+  {
+    "dimension": "Implicit Timeline/Context",
+    "value": "Likely linked to current progress, upcoming deadline, or planned next steps"
+  },
+  {
+    "dimension": "Desired Outcome/Call to Action",
+    "value": "Needs a clear indication of what response or action is required from the professor"
+  }
+]

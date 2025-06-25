@@ -1,0 +1,23 @@
+[
+  {
+    "id": "relationship_type",
+    "title": "Relationship type",
+    "options": [
+      "Supervisor and Student"
+    ]
+  },
+  {
+    "id": "maintain_relationship",
+    "title": "Needs for Maintaining relationship",
+    "options": [
+      "Get closer"
+    ]
+  },
+  {
+    "id": "you_want_receiver_feel",
+    "title": "You want the receiver to feel you are",
+    "options": [
+      "Gratitude / Appreciation 🙏"
+    ]
+  }
+]

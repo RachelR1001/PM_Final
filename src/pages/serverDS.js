@@ -363,9 +363,10 @@ app.post('/generate-first-draft', async (req, res) => {
         .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
         .replace('{{INTENT_CURRENT}}', JSON.stringify(intents, null, 2));
 
-    // 使用传入的taskId构建路径，并按照要求命名为 00_first.md
-    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', '00_first.md');
-    const latestPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
+    // Construct paths for 00_first.md and latest.md
+    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts');
+    const firstDraftPath = path.join(draftsPath, '00_first.md');
+    const latestDraftPath = path.join(draftsPath, 'latest.md');
 
     try {
         const response = await sendRequestToDeepSeek(prompt);
@@ -377,14 +378,14 @@ app.post('/generate-first-draft', async (req, res) => {
 
         const draftContent = response.choices[0].message.content.trim();
 
-        // 确保目录存在
-        if (!fs.existsSync(path.dirname(draftsPath))) {
-            fs.mkdirSync(path.dirname(draftsPath), { recursive: true });
+        // Ensure the drafts directory exists
+        if (!fs.existsSync(draftsPath)) {
+            fs.mkdirSync(draftsPath, { recursive: true });
         }
-        
-        // 保存为 00_first.md 和 latest.md
-        fs.writeFileSync(draftsPath, draftContent);
-        fs.writeFileSync(latestPath, draftContent);
+
+        // Save the content to both 00_first.md and latest.md
+        fs.writeFileSync(firstDraftPath, draftContent, 'utf-8');
+        fs.writeFileSync(latestDraftPath, draftContent, 'utf-8');
 
         res.json({ draft: draftContent });
     } catch (error) {
@@ -447,7 +448,6 @@ app.post('/variation-maker', async (req, res) => {
         return res.status(500).json({ error: 'Failed to load prompt template' });
     }
 
-    // Replace placeholders in the prompt
     const prompt = promptTemplate
         .replace('{{Draft_LATEST}}', draftLatest)
         .replace('{{factor_choices}}', JSON.stringify(factorChoices, null, 2))
@@ -461,14 +461,135 @@ app.post('/variation-maker', async (req, res) => {
             return res.status(500).json({ error: 'AI response is empty' });
         }
 
-        // Parse the response to extract variations
         const rawContent = response.choices[0].message.content.trim();
-        const variations = rawContent.split('\n').filter((line) => line.trim() !== '');
+        const variations = rawContent
+            .split('\n')
+            .filter((line) => line.trim() !== '') // Remove empty lines
+            .map((line) => {
+                // Remove markdown artifacts and trim whitespace
+                let cleanedLine = line.replace(/^[\s"']+|[\s"']+$/g, '').replace(/和$/, '');
+                
+                // Extract content up to the first sentence-ending punctuation
+                // Look for ., ?, ! followed by space, quote, or end of string
+                const match = cleanedLine.match(/^(.*?[.?!])(?:\s|["']|$)/);
+                if (match) {
+                    return match[1]; // Return the sentence without trailing punctuation context
+                }
+                
+                // If no sentence-ending punctuation found, return the cleaned line
+                return cleanedLine;
+            })
+            .filter((line) => line.trim() !== ''); // Remove any empty results
 
         res.json({ variations });
     } catch (error) {
         console.error('Error in Variation Maker:', error);
         res.status(500).json({ error: 'Error in Variation Maker' });
+    }
+});
+
+app.post('/variation-intent-analyzer', async (req, res) => {
+    const {
+        draftLatest,
+        factorChoices,
+        intentCurrent,
+        selectedContent,
+        localizedRevisedContent,
+        variationOptions,
+        userName,
+        taskId,
+    } = req.body;
+
+    if (
+        !draftLatest ||
+        !factorChoices ||
+        !intentCurrent ||
+        !selectedContent ||
+        !localizedRevisedContent ||
+        !variationOptions ||
+        !userName ||
+        !taskId
+    ) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/variation_intent_analyzer.prompt.md');
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load variation_intent_analyzer.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    // Replace placeholders in the prompt
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', draftLatest)
+        .replace('{{DRAFT_LATEST}}', draftLatest)
+        .replace('{{SELECTED_CONTENT}}', selectedContent)
+        .replace('{{LOCALIZED_REVISED_CONTENT}}', localizedRevisedContent)
+        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
+        .replace('{{VARIATION_OPTION}}', JSON.stringify(variationOptions, null, 2))
+        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2));
+
+    try {
+        const response = await sendRequestToDeepSeek(prompt);
+
+        if (!response.choices || response.choices.length === 0) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        const rawContent = response.choices[0].message.content.trim();
+        const jsonContent = rawContent.replace(/```json|```/g, ''); // Remove Markdown formatting
+        const parsedData = JSON.parse(jsonContent);
+
+        // Build the path to the intents file
+        const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+
+        // Read the current intents
+        let currentIntents = [];
+        if (fs.existsSync(intentsPath)) {
+            try {
+                currentIntents = JSON.parse(fs.readFileSync(intentsPath, 'utf-8'));
+            } catch (error) {
+                console.error('Error reading current intents:', error);
+                currentIntents = intentCurrent; // Use the provided intents as a fallback
+            }
+        } else {
+            currentIntents = intentCurrent; // Use the provided intents as a fallback
+        }
+
+        // Apply the AI's edit instructions
+        if (Array.isArray(parsedData)) {
+            parsedData.forEach((instruction) => {
+                const { action, prev, next } = instruction;
+                if (action === 'add') {
+                    currentIntents.push(next);
+                } else if (action === 'remove') {
+                    currentIntents = currentIntents.filter(
+                        (intent) => !(intent.dimension === prev.dimension && intent.value === prev.value)
+                    );
+                } else if (action === 'change') {
+                    currentIntents = currentIntents.map((intent) =>
+                        intent.dimension === prev.dimension && intent.value === prev.value ? next : intent
+                    );
+                }
+            });
+        }
+
+        // Ensure the directory exists
+        const intentsDir = path.dirname(intentsPath);
+        if (!fs.existsSync(intentsDir)) {
+            fs.mkdirSync(intentsDir, { recursive: true });
+        }
+
+        // Save the updated intents
+        fs.writeFileSync(intentsPath, JSON.stringify(currentIntents, null, 2));
+
+        res.json({ updatedIntents: currentIntents });
+    } catch (error) {
+        console.error('Error in Variation Intent Analyzer:', error);
+        res.status(500).json({ error: 'Error in Variation Intent Analyzer: ' + error.message });
     }
 });
 
@@ -490,6 +611,44 @@ app.post('/sessiondata/:taskId/drafts/latest.md', (req, res) => {
     } catch (error) {
         console.error('Error saving content to latest.md:', error);
         res.status(500).json({ error: 'Failed to save content.' });
+    }
+});
+
+app.post('/direct-rewriter', async (req, res) => {
+    const { draftLatest, factorChoices, intentCurrent, selectedContent, manualInstruction } = req.body;
+
+    if (!draftLatest || !factorChoices || !intentCurrent || !selectedContent || !manualInstruction) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/direct_revision_intent_analyzer_prompt.md');
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load direct_revision_intent_analyzer_prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', draftLatest)
+        .replace('{{DRAFT_LATEST}}', draftLatest)
+        .replace('{{SELECTED_CONTENT}}', selectedContent)
+        .replace('{{LOCALIZED_REVISED_CONTENT}}', manualInstruction)
+        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2));
+
+    try {
+        const response = await sendRequestToDeepSeek(prompt);
+
+        if (!response.choices || response.choices.length === 0) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        const rewrittenVersion = response.choices[0].message.content.trim();
+        res.json({ rewrittenVersion });
+    } catch (error) {
+        console.error('Error in Direct Rewriter:', error);
+        res.status(500).json({ error: 'Error in Direct Rewriter' });
     }
 });
 

@@ -1,11 +1,91 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { createEditor, Editor, Transforms, Text } from 'slate';
 import { Slate, Editable, withReact, useSlate } from 'slate-react';
-import { Row, Col, Card, Typography, Tag, Menu, Dropdown, Modal, Radio, message } from 'antd';
+import { Row, Col, Card, Typography, Tag, Menu, Dropdown, Modal, Radio, message, Spin } from 'antd';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 
 const { Title, Text: AntText } = Typography;
+
+// 辅助函数 - 移到组件外部，在使用前定义
+const toggleFormat = (editor, format) => {
+    const isActive = isFormatActive(editor, format);
+
+    if (isActive) {
+        Editor.removeMark(editor, format);
+    } else {
+        Editor.addMark(editor, format, true);
+    }
+};
+
+// 辅助函数 - 检查文本格式是否激活
+const isFormatActive = (editor, format) => {
+    const marks = Editor.marks(editor);
+    return marks ? marks[format] === true : false;
+};
+
+// 辅助函数 - 切换块级元素
+const toggleBlock = (editor, format) => {
+    const isActive = isBlockActive(editor, format);
+    const isList = ['numbered-list', 'bulleted-list'].includes(format);
+
+    Transforms.unwrapNodes(editor, {
+        match: n => ['numbered-list', 'bulleted-list'].includes(n.type),
+        split: true,
+    });
+
+    Transforms.setNodes(editor, {
+        type: isActive ? 'paragraph' : isList ? 'list-item' : format,
+    });
+
+    if (!isActive && isList) {
+        const block = { type: format, children: [] };
+        Transforms.wrapNodes(editor, block);
+    }
+};
+
+// 辅助函数 - 检查块级元素是否激活
+const isBlockActive = (editor, format) => {
+    const [match] = Editor.nodes(editor, {
+        match: n => n.type === format,
+    });
+
+    return !!match;
+};
+
+// 安全的节点内容提取函数
+const getNodeText = (editor, node) => {
+    try {
+        // 检查节点是否有效
+        if (!node || typeof node !== 'object') {
+            return '';
+        }
+        
+        // 如果节点有 children 属性且是数组
+        if (node.children && Array.isArray(node.children)) {
+            return node.children.map(child => {
+                if (typeof child === 'string') {
+                    return child;
+                } else if (child && typeof child === 'object' && child.text !== undefined) {
+                    return child.text;
+                } else if (child && child.children) {
+                    return getNodeText(editor, child);
+                }
+                return '';
+            }).join('');
+        }
+        
+        // 如果节点直接有 text 属性
+        if (node.text !== undefined) {
+            return node.text;
+        }
+        
+        return '';
+    } catch (error) {
+        console.error('Error processing node:', node, error);
+        return '';
+    }
+};
 
 // 工具栏按钮组件
 const ToolbarButton = ({ format, children, isActive, onMouseDown }) => {
@@ -153,7 +233,7 @@ const ThirdPage = () => {
     const initialValue = useMemo(() => [
         {
             type: 'paragraph',
-            children: [{ text: 'Loading content...' }],
+            children: [{ text: '' }],
         },
     ], []);
 
@@ -164,6 +244,11 @@ const ThirdPage = () => {
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [variationOptions, setVariationOptions] = useState([]);
     const [selectedOption, setSelectedOption] = useState(null);
+    const [isLoadingVariations, setIsLoadingVariations] = useState(false);
+    const [isDirectRewriterModalVisible, setIsDirectRewriterModalVisible] = useState(false);
+    const [manualInstruction, setManualInstruction] = useState('');
+    const [rewrittenVersion, setRewrittenVersion] = useState('');
+    const [isLoadingRewrittenVersion, setIsLoadingRewrittenVersion] = useState(false);
 
     // Function to handle right-click
     const handleContextMenu = (event) => {
@@ -193,28 +278,22 @@ const ThirdPage = () => {
     // Function to handle menu option clicks
     const handleMenuClick = async (option) => {
         if (option === 'Variation Maker') {
-            // Show the modal
             setIsModalVisible(true);
+            setIsLoadingVariations(true);
 
-            // Validate and prepare the data for the prompt
             if (!value || !Array.isArray(value) || value.length === 0) {
                 message.error('Editor content is invalid or empty.');
+                setIsLoadingVariations(false);
                 return;
             }
 
             const draftLatest = value
-                .map((node) => {
-                    try {
-                        return Editor.string(editor, [node]);
-                    } catch (error) {
-                        console.error('Error processing node:', node, error);
-                        return '';
-                    }
-                })
+                .map((node) => getNodeText(editor, node))
+                .filter((text) => text.trim())
                 .join('\n\n');
 
-            const factorChoices = getFactorChoices();
-            const intentCurrent = getIntentCurrent();
+            const factorChoices = await getFactorChoices();
+            const intentCurrent = await getIntentCurrent();
 
             try {
                 const response = await axios.post('http://localhost:3001/variation-maker', {
@@ -225,16 +304,15 @@ const ThirdPage = () => {
                 });
 
                 if (response.data && response.data.variations) {
-                    // Parse the variations to remove unnecessary characters
                     const rawVariations = response.data.variations;
                     const parsedVariations = rawVariations
-                        .filter((line) => 
-                            line.trim() && // Remove empty lines
-                            !line.startsWith('```') && // Remove markdown artifacts
-                            line.trim() !== '[' && // Remove opening bracket
-                            line.trim() !== ']' // Remove closing bracket
+                        .filter((line) =>
+                            line.trim() &&
+                            !line.startsWith('```') &&
+                            line.trim() !== '[' &&
+                            line.trim() !== ']'
                         )
-                        .map((line) => line.replace(/^[\s"']+|[\s"']+$/g, '')); // Trim quotes and whitespace
+                        .map((line) => line.replace(/^[\s"']+|[\s"']+$/g, '').replace(/和$/, ''));
 
                     setVariationOptions(parsedVariations);
                 } else {
@@ -243,72 +321,108 @@ const ThirdPage = () => {
             } catch (error) {
                 console.error('Error fetching variations:', error);
                 message.error('Error fetching variations. Please try again.');
+            } finally {
+                setIsLoadingVariations(false);
             }
+        } else if (option === 'Direct-Rewrite Agent') {
+            setIsDirectRewriterModalVisible(true);
+            setRewrittenVersion(''); // Clear previous rewritten version
+            setManualInstruction(''); // Clear previous manual instruction
         }
     };
 
-    // Function to get factor choices (mocked for now)
-    const getFactorChoices = () => {
-        return [
-            {
-                id: 'relationship_type',
-                title: 'Relationship type',
-                options: ['Supervisor and Student'],
-            },
-        ];
+    // Function to get factor choices from the backend
+    const getFactorChoices = async () => {
+        try {
+            const response = await axios.get(`http://localhost:3001/sessiondata/${taskId}/factors/choices.json`);
+            return response.data; // Return the JSON data
+        } catch (error) {
+            console.error('Error fetching factor choices:', error);
+            message.error('Failed to fetch factor choices. Please try again.');
+            return []; // Return an empty array as a fallback
+        }
     };
 
-    // Function to get intent current (mocked for now)
-    const getIntentCurrent = () => {
-        return [
-            { dimension: 'directness', value: 'explicit' },
-            { dimension: 'urgency', value: 'same-day' },
-        ];
+    // Function to get current intents from the backend
+    const getIntentCurrent = async () => {
+        try {
+            const response = await axios.get(`http://localhost:3001/sessiondata/${taskId}/intents/current.json`);
+            return response.data; // Return the JSON data
+        } catch (error) {
+            console.error('Error fetching current intents:', error);
+            message.error('Failed to fetch current intents. Please try again.');
+            return []; // Return an empty array as a fallback
+        }
     };
 
-    // Function to handle modal confirm
+    // Function to handle modal confirm for Variation Maker
     const handleModalConfirm = async () => {
+        console.log('handleModalConfirm triggered'); // Debug log
+
         if (!selectedOption) {
             message.error('Please select a variation before confirming.');
             return;
         }
 
-        // Replace the selected text in the editor
-        const { selection } = editor;
-        if (selection) {
-            Transforms.insertText(editor, selectedOption, { at: selection });
-        }
+        setIsLoadingVariations(true);
 
-        // Validate and prepare the updated content
-        if (!value || !Array.isArray(value) || value.length === 0) {
-            message.error('Editor content is invalid or empty.');
-            return;
-        }
-
-        const updatedContent = value
-            .map((node) => {
-                try {
-                    return Editor.string(editor, [node]);
-                } catch (error) {
-                    console.error('Error processing node:', node, error);
-                    return '';
-                }
-            })
-            .join('\n\n');
-
-        // Save the updated content to latest.md
         try {
-            await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
-                content: updatedContent,
-            });
-            message.success('Content saved successfully.');
-        } catch (error) {
-            console.error('Error saving content:', error);
-            message.error('Failed to save content. Please try again.');
-        }
+            // Fetch real data for factor choices and current intents
+            const factorChoices = await getFactorChoices();
+            const intentCurrent = await getIntentCurrent();
 
-        // Close the modal
-        handleModalClose();
+            // Get the current editor content
+            const draftLatest = value
+                .map((node) => getNodeText(editor, node))
+                .filter((text) => text.trim())
+                .join('\n\n');
+
+            // Prepare the data for the request
+            const requestData = {
+                draftLatest,
+                factorChoices,
+                intentCurrent,
+                selectedContent: selectedText,
+                localizedRevisedContent: selectedOption,
+                variationOptions,
+                userName,
+                taskId,
+            };
+
+            console.log('Sending request to /variation-intent-analyzer with data:', requestData);
+
+            // Send the request to the server
+            const response = await axios.post('http://localhost:3001/variation-intent-analyzer', requestData);
+
+            if (response.data && response.data.updatedIntents) {
+                message.success('Intents updated successfully.');
+                console.log('Updated intents:', response.data.updatedIntents);
+
+                // Replace the selected text with the new variation in the editor
+                const { selection } = editor;
+                if (selection && selectedText) {
+                    try {
+                        if (Editor.string(editor, selection) === selectedText) {
+                            Transforms.delete(editor, { at: selection });
+                            Transforms.insertText(editor, selectedOption, { at: selection.anchor });
+                        } else {
+                            Transforms.insertText(editor, selectedOption);
+                        }
+                    } catch (transformError) {
+                        console.warn('Error replacing text in editor:', transformError);
+                        Transforms.insertText(editor, selectedOption); // Fallback
+                    }
+                }
+            } else {
+                message.error('Failed to update intents. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error during handleModalConfirm:', error);
+            message.error('An error occurred. Please try again.');
+        } finally {
+            setIsLoadingVariations(false);
+            handleModalClose();
+        }
     };
 
     // Function to handle modal close
@@ -321,6 +435,45 @@ const ThirdPage = () => {
     // Function to handle radio selection
     const handleOptionChange = (e) => {
         setSelectedOption(e.target.value);
+    };
+
+    // Function to handle rewrite request
+    const handleRewrite = async () => {
+        if (!manualInstruction.trim()) {
+            message.error('Please provide a manual instruction.');
+            return;
+        }
+
+        setIsLoadingRewrittenVersion(true);
+
+        const draftLatest = value
+            .map((node) => getNodeText(editor, node))
+            .filter((text) => text.trim())
+            .join('\n\n');
+
+        const factorChoices = await getFactorChoices();
+        const intentCurrent = await getIntentCurrent();
+
+        try {
+            const response = await axios.post('http://localhost:3001/direct-rewriter', {
+                draftLatest,
+                factorChoices,
+                intentCurrent,
+                selectedContent: selectedText,
+                manualInstruction,
+            });
+
+            if (response.data && response.data.rewrittenVersion) {
+                setRewrittenVersion(response.data.rewrittenVersion);
+            } else {
+                message.error('Failed to fetch rewritten version. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error fetching rewritten version:', error);
+            message.error('Error fetching rewritten version. Please try again.');
+        } finally {
+            setIsLoadingRewrittenVersion(false);
+        }
     };
 
     // 动态加载草稿内容
@@ -505,6 +658,10 @@ const ThirdPage = () => {
                                         initialValue={value}
                                         onChange={(newValue) => setValue(newValue)}
                                     >
+                                        {/* Render the toolbar */}
+                                        <Toolbar />
+
+                                        {/* Render the editable area */}
                                         <Editable
                                             renderElement={renderElement}
                                             renderLeaf={renderLeaf}
@@ -517,7 +674,7 @@ const ThirdPage = () => {
                                             }}
                                         />
                                     </Slate>
-                        </div>
+                                </div>
                             </Dropdown>
                         ) : (
                             <div
@@ -547,64 +704,111 @@ const ThirdPage = () => {
                 okText="Confirm"
                 cancelText="Cancel"
                 okButtonProps={{ disabled: !selectedOption }}
+                width={{
+                    xs: '90%',
+                    sm: '80%',
+                    md: '70%',
+                    lg: '60%',
+                    xl: '50%',
+                    xxl: '40%',
+                }}
+            >
+                {isLoadingVariations ? (
+                    <Spin tip="Loading variations..." />
+                ) : (
+                    <>
+                        <p><strong>Selected Content:</strong> {selectedText}</p>
+                        <Radio.Group onChange={handleOptionChange} value={selectedOption} style={{ width: '100%' }}>
+                            {variationOptions.map((option, index) => (
+                                    <div key={index} style={{ marginBottom: '12px' }}>
+                                    <Radio 
+                                        value={option}
+                                        style={{ 
+                                            display: 'flex',
+                                            alignItems: 'flex-start',
+                                            whiteSpace: 'normal',
+                                            lineHeight: '1.5'
+                                        }}
+                                    >
+                                        <span style={{ marginLeft: '8px', wordBreak: 'break-word' }}>
+                                            {option}
+                                        </span>
+                                    </Radio>
+                                </div>
+                            ))}
+                        </Radio.Group>
+                    </>
+                )}
+            </Modal>
+
+            {/* Modal for Direct Rewriter Agent */}
+            <Modal
+                title="Direct Rewriter Agent"
+                visible={isDirectRewriterModalVisible}
+                onCancel={() => setIsDirectRewriterModalVisible(false)}
+                footer={null}
+                width={{
+                    xs: '90%',
+                    sm: '80%',
+                    md: '70%',
+                    lg: '60%',
+                    xl: '50%',
+                    xxl: '40%',
+                }}
             >
                 <p><strong>Selected Content:</strong> {selectedText}</p>
-                <Radio.Group onChange={handleOptionChange} value={selectedOption}>
-                    {variationOptions.map((option, index) => (
-                        <Radio key={index} value={option}>
-                            {option}
-                        </Radio>
-                    ))}
-                </Radio.Group>
+                <div style={{ marginBottom: '16px' }}>
+                    <strong>Your Manual Instruction:</strong>
+                    <input
+                        type="text"
+                        placeholder="Please input your free-form instruction for AI agent to rewrite the selected content"
+                        value={manualInstruction}
+                        onChange={(e) => setManualInstruction(e.target.value)}
+                        style={{
+                            width: '100%',
+                            padding: '8px',
+                            marginTop: '8px',
+                            border: '1px solid #d9d9d9',
+                            borderRadius: '4px',
+                        }}
+                    />
+                </div>
+                <button
+                    onClick={handleRewrite}
+                    style={{
+                        padding: '8px 16px',
+                        background: '#1890ff',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        marginBottom: '16px',
+                    }}
+                >
+                    Rewrite
+                </button>
+                <div>
+                    <strong>Rewritten Version:</strong>
+                    {isLoadingRewrittenVersion ? (
+                        <Spin tip="Loading rewritten version..." />
+                    ) : (
+                        <div
+                            style={{
+                                marginTop: '8px',
+                                padding: '12px',
+                                background: '#f8f9fa',
+                                borderRadius: '4px',
+                                border: '1px solid #d9d9d9',
+                                minHeight: '100px',
+                            }}
+                        >
+                            {rewrittenVersion || 'No rewritten version available.'}
+                        </div>
+                    )}
+                </div>
             </Modal>
         </div>
     );
 };
 
-// 辅助函数 - 切换文本格式
-const toggleFormat = (editor, format) => {
-    const isActive = isFormatActive(editor, format);
-
-    if (isActive) {
-        Editor.removeMark(editor, format);
-    } else {
-        Editor.addMark(editor, format, true);
-    }
-};
-
-// 辅助函数 - 检查文本格式是否激活
-const isFormatActive = (editor, format) => {
-    const marks = Editor.marks(editor);
-    return marks ? marks[format] === true : false;
-};
-
-// 辅助函数 - 切换块级元素
-const toggleBlock = (editor, format) => {
-    const isActive = isBlockActive(editor, format);
-    const isList = ['numbered-list', 'bulleted-list'].includes(format);
-
-    Transforms.unwrapNodes(editor, {
-        match: n => ['numbered-list', 'bulleted-list'].includes(n.type),
-        split: true,
-    });
-
-    Transforms.setNodes(editor, {
-        type: isActive ? 'paragraph' : isList ? 'list-item' : format,
-    });
-
-    if (!isActive && isList) {
-        const block = { type: format, children: [] };
-        Transforms.wrapNodes(editor, block);
-    }
-};
-
-// 辅助函数 - 检查块级元素是否激活
-const isBlockActive = (editor, format) => {
-    const [match] = Editor.nodes(editor, {
-        match: n => n.type === format,
-    });
-
-    return !!match;
-};
-
-export default ThirdPage;    
+export default ThirdPage;

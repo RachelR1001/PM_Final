@@ -1,0 +1,23 @@
+[
+  {
+    "id": "relationship_type",
+    "title": "Relationship type",
+    "options": [
+      "Supervisor and Student"
+    ]
+  },
+  {
+    "id": "occasion",
+    "title": "Occasion",
+    "options": [
+      "Formal: Communication related to academic matters (grades, deadlines, research, etc.)"
+    ]
+  },
+  {
+    "id": "maintain_relationship",
+    "title": "Needs for Maintaining relationship",
+    "options": [
+      "Remain the same (Maintain professional distance)"
+    ]
+  }
+]

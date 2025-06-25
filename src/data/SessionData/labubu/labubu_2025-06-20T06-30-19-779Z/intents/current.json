@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Tone",
+    "value": "Friendly and casual"
+  },
+  {
+    "dimension": "Purpose",
+    "value": "Personal connection or update"
+  },
+  {
+    "dimension": "Formality",
+    "value": "Low, informal"
+  },
+  {
+    "dimension": "Emotional Tone",
+    "value": "Warm and respectful"
+  },
+  {
+    "dimension": "Content Focus",
+    "value": "Personal or shared interests"
+  }
+]

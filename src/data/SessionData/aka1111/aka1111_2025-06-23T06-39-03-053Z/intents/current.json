@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Email Purpose",
+    "value": "Requesting urgent action or decision"
+  },
+  {
+    "dimension": "Specific Topic",
+    "value": "Related to ongoing supervised academic work (e.g., project, thesis)"
+  },
+  {
+    "dimension": "Level of Detail",
+    "value": "Concise but with enough context for urgent action"
+  },
+  {
+    "dimension": "Tone Nuance",
+    "value": "Respectful, direct, and potentially slightly informal due to familiarity"
+  },
+  {
+    "dimension": "Call to Action Focus",
+    "value": "Clear statement of needed action and implied timeframe"
+  }
+]
