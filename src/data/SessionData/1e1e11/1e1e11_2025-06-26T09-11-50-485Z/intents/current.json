@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Specific Purpose",
+    "value": "Concerns a particular academic or research-related topic"
+  },
+  {
+    "dimension": "Desired Action",
+    "value": "Aims to elicit a specific response or action from the professor"
+  },
+  {
+    "dimension": "Level of Detail",
+    "value": "Requires appropriate technical or academic depth relevant to the subject"
+  },
+  {
+    "dimension": "Reference to Past Interactions",
+    "value": "Likely needs to build upon previous discussions or progress updates"
+  },
+  {
+    "dimension": "Implicit Urgency",
+    "value": "The topic may imply a certain timeframe for response or action"
+  }
+]

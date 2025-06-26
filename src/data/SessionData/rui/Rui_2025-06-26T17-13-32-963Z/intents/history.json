@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-06-26T17:21:42.166Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Issue Scope",
+      "value": "Likely pertains to progress on supervised research, project, or academic standing under their guidance."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:21:42.167Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Implicit Goal",
+      "value": "Seeking guidance, reporting a significant obstacle, or requesting accommodation/action related to supervised work."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:21:42.168Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Information Provided",
+      "value": "Needs to clearly state the specific issue and its impact on ongoing supervised tasks/deadlines."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:21:42.169Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Tone Nuance",
+      "value": "Respectful yet potentially conveying urgency or seriousness depending on the issue's impact."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:21:42.169Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Expected Outcome",
+      "value": "Resolution of the issue, professor's advice, approval, or intervention."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

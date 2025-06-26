@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-06-26T15:58:55.952Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Likely Subject Matter Category",
+      "value": "Academic-related query or request"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T15:58:55.952Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Inferred Communication Style",
+      "value": "Professional, comfortable, and respectful"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T15:58:55.953Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Assumed Prior Context",
+      "value": "Professor recognizes student and relevant academic area"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T15:58:55.953Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Probable Desired Professor Action",
+      "value": "Provide information, guidance, or schedule meeting"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T15:58:55.953Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Underlying Student Stance",
+      "value": "Seeks productive engagement, not conflict"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

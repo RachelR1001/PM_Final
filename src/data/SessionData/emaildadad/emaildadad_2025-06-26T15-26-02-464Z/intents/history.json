@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-06-26T15:26:50.503Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Gratitude Specificity",
+      "value": "Likely for significant contribution or ongoing support"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T15:26:50.503Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Contextual Trigger",
+      "value": "Possibly prompted by a recent positive outcome or reflection"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T15:26:50.504Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Implicit Goal",
+      "value": "Maintain positive relationship / connection"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T15:26:50.504Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Level of Detail in Thanks",
+      "value": "Specific examples would enhance sincerity"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T15:26:50.504Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Need for Contextual Reminder",
+      "value": "Brief reminder of user/interaction context may be helpful despite familiarity"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

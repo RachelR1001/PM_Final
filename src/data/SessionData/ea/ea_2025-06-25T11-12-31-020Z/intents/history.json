@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-06-25T11:14:27.785Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Primary Subject Matter",
+      "value": "Query or request related to the specific course or academic standing"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T11:14:27.787Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Desired Outcome from Professor",
+      "value": "Information, clarification, permission, or scheduling"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T11:14:27.787Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Level of Detail Required",
+      "value": "Sufficient detail for the professor to understand the context without excessive background"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T11:14:27.787Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Urgency Level",
+      "value": "Standard academic timeline, not immediate emergency unless specified"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T11:14:27.788Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Required Tone Subtleties",
+      "value": "Respectful, clear, and concise, avoiding demanding language"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

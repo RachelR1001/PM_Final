@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Purpose of Email",
+    "value": "Related to formal academic/university event, announcement"
+  },
+  {
+    "dimension": "Sender's Role",
+    "value": "Likely acting in a formal capacity (e.g., student rep, club officer, research assistant)"
+  },
+  {
+    "dimension": "Specific Context",
+    "value": "Formal event organization, official university/department communication, or formal group announcement"
+  },
+  {
+    "dimension": "Required Content",
+    "value": "Official details"
+  },
+  {
+    "dimension": "Desired Outcome",
+    "value": "Inform, request participation/action for a formal matter, or make an official announcement"
+  }
+]

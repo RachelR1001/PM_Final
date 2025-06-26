@@ -1,0 +1,58 @@
+[
+  {
+    "dimension": "Primary Email Purpose",
+    "value": "need requiring professor's intervention and feedback"
+  },
+  {
+    "dimension": "Required Information",
+    "value": "Enough context for professor to act quickly without follow-up questions"
+  },
+  {
+    "dimension": "Tone Requirement",
+    "value": "Balancing urgency with respect and professionalism"
+  },
+  {
+    "dimension": "Action Needed from Professor",
+    "value": "roughly ask for a timely response or action"
+  },
+  {
+    "dimension": "Implicit Constraint",
+    "value": "Must be concise to respect professor's time"
+  },
+  {
+    "dimension": "custom",
+    "value": "simplify the sentences"
+  },
+  {
+    "dimension": "custom",
+    "value": "simplify the sentences"
+  },
+  {
+    "dimension": "custom",
+    "value": "simplify the sentences"
+  },
+  {
+    "dimension": "custom",
+    "value": "simplify the sentences"
+  },
+  {
+    "dimension": "custom",
+    "value": "simplify the sentences"
+  },
+  {
+    "dimension": "custom",
+    "value": "Thank you very much for your understanding and prompt attention to this urgent matter, as its timely resolution is greatly appreciated."
+  },
+  {
+    "dimension": "custom",
+    "value": "Thank you very much for your understanding and prompt attention to this urgent matter, as its timely resolution is greatly appreciated."
+  },
+  {
+    "dimension": "custom",
+    "value": "I understand you have many demands on your time and greatly appreciate how busy you are"
+  },
+  {
+    "dimension": "custom",
+    "value": "Thank you very much for your understanding and prompt attention to this urgent matter, as its timely resolution is greatly appreciated."
+  }
+]

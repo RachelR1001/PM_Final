@@ -1,0 +1,23 @@
+[
+  {
+    "id": "power_difference",
+    "title": "Power, resource, status, hierarchy difference",
+    "options": [
+      "Receiver is higher"
+    ]
+  },
+  {
+    "id": "familiarity",
+    "title": "Familiarity",
+    "options": [
+      "Familiar"
+    ]
+  },
+  {
+    "id": "occasion",
+    "title": "Occasion",
+    "options": [
+      "Formal: On behalf of an organization or writing for a formal event. Formal notification or announcement."
+    ]
+  }
+]

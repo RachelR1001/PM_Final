@@ -1,9 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { createEditor, Editor, Transforms, Text } from 'slate';
 import { Slate, Editable, withReact, useSlate } from 'slate-react';
-import { Row, Col, Card, Typography, Tag, Menu, Dropdown, Modal, Radio, message, Spin } from 'antd';
+import { Row, Col, Card, Typography, Tag, Menu, Dropdown, Modal, Radio, message, Spin, Checkbox, Input, Button, Alert, List } from 'antd';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
+import aspectsList from '../data/PredefinedData/aspects_list.json';
+import { EditOutlined, SaveOutlined } from '@ant-design/icons';
 
 const { Title, Text: AntText } = Typography;
 
@@ -251,6 +253,14 @@ const ThirdPage = () => {
     const [rewrittenVersion, setRewrittenVersion] = useState('');
     const [isLoadingRewrittenVersion, setIsLoadingRewrittenVersion] = useState(false);
     const [intents, setIntents] = useState([]);
+    const [isSelectiveAspectRewriterModalVisible, setIsSelectiveAspectRewriterModalVisible] = useState(false);
+    const [aspectsKeep, setAspectsKeep] = useState([]);
+    const [aspectsChange, setAspectsChange] = useState([]);
+    const [editingIndex, setEditingIndex] = useState(null); // 当前正在编辑的 intent 索引
+    const [editingValue, setEditingValue] = useState(''); // 当前编辑的值
+    const [directRewriterLoading, setDirectRewriterLoading] = useState(false);
+    const [selectiveAspectLoading, setSelectiveAspectLoading] = useState(false);
+    const [editorKey, setEditorKey] = useState(0); // 添加一个状态变量
 
     // Function to handle right-click
     const handleContextMenu = (event) => {
@@ -258,7 +268,9 @@ const ThirdPage = () => {
 
         // Get the selected text
         const selection = window.getSelection();
+        console.log('Selection:', selection); // Debug log
         const selectedText = selection.toString();
+        console.log('Selected Text:', selectedText); // Debug log
 
         if (selectedText) {
             setSelectedText(selectedText);
@@ -330,6 +342,12 @@ const ThirdPage = () => {
             setIsDirectRewriterModalVisible(true);
             setRewrittenVersion(''); // Clear previous rewritten version
             setManualInstruction(''); // Clear previous manual instruction
+        } else if (option === 'Selective Aspect Rewriter') {
+            setIsSelectiveAspectRewriterModalVisible(true);
+            setAspectsKeep([]);
+            setAspectsChange([]);
+            setManualInstruction('');
+            setRewrittenVersion('');
         }
     };
 
@@ -407,7 +425,7 @@ const ThirdPage = () => {
                         if (Editor.string(editor, selection) === selectedText) {
                             Transforms.delete(editor, { at: selection });
                             Transforms.insertText(editor, selectedOption, { at: selection.anchor });
-                                } else {
+                        } else {
                             Transforms.insertText(editor, selectedOption);
                         }
                     } catch (transformError) {
@@ -441,38 +459,35 @@ const ThirdPage = () => {
 
     // Function to handle rewrite request
     const handleRewrite = async () => {
-        if (!manualInstruction.trim()) {
-            message.error('Please provide a manual instruction.');
-            return;
-        }
-
         setIsLoadingRewrittenVersion(true);
 
-        const draftLatest = value
-            .map((node) => getNodeText(editor, node))
-            .filter((text) => text.trim())
-            .join('\n\n');
-
-        const factorChoices = await getFactorChoices();
-        const intentCurrent = await getIntentCurrent();
-
         try {
-            const response = await axios.post('http://localhost:3001/direct-rewriter', {
-                draftLatest,
-                factorChoices,
-                intentCurrent,
-                selectedContent: selectedText,
-                manualInstruction,
-            });
+            const draftLatest = value
+                .map((node) => getNodeText(editor, node))
+                .filter((text) => text.trim())
+                .join('\n\n');
+
+            const requestData = {
+                draftLatest: draftLatest || '', // 确保非空
+                factorChoices: (await getFactorChoices()) || [], // 确保非空
+                intentCurrent: intents || [], // 确保非空
+                selectedContent: selectedText || '', // 确保非空
+                manualInstruction: manualInstruction.trim() || '', // 允许为空
+                userName: userName || 'unknown', // 确保非空
+                taskId: taskId || 'unknown', // 确保非空
+            };
+
+            const response = await axios.post('http://localhost:3001/direct-rewriter', requestData);
 
             if (response.data && response.data.rewrittenVersion) {
-                setRewrittenVersion(response.data.rewrittenVersion);
+                setRewrittenVersion(response.data.rewrittenVersion.trim());
+                message.success('Rewritten version generated successfully.');
             } else {
-                message.error('Failed to fetch rewritten version. Please try again.');
+                message.error('Failed to generate rewritten version. Please try again.');
             }
         } catch (error) {
-            console.error('Error fetching rewritten version:', error);
-            message.error('Error fetching rewritten version. Please try again.');
+            console.error('Error in handleRewrite:', error);
+            message.error('Error in handleRewrite. Please try again.');
         } finally {
             setIsLoadingRewrittenVersion(false);
         }
@@ -487,6 +502,74 @@ const ThirdPage = () => {
             console.error('Error fetching intents:', error);
             message.error('Failed to fetch intents. Please try again.');
         }
+    };
+
+    // Function to save updated intents to current.json and history.json
+    const saveIntent = async (index, updatedValue) => {
+        try {
+            // 确保 taskId 存在
+            if (!taskId) {
+                throw new Error('Task ID is missing.');
+            }
+
+            // 获取当前 intent 和更新后的 intent
+            const prevIntent = intents[index];
+            const updatedIntent = { ...prevIntent, value: updatedValue };
+
+            // 调用后端接口
+            await axios.post(`http://localhost:3001/sessiondata/${taskId}/intents/manual-update`, {
+                prevIntent,
+                updatedIntent,
+            });
+
+            // 更新前端状态
+            const updatedIntents = [...intents];
+            updatedIntents[index] = updatedIntent;
+            setIntents(updatedIntents);
+
+            message.success('Intent updated successfully.');
+        } catch (error) {
+            console.error('Error saving intent:', error);
+            message.error('Failed to save intent. Please try again.');
+        }
+    };
+
+    // Placeholder for Regenerate Draft button click
+    const handleRegenerateDraft = async () => {
+        try {
+            const response = await axios.post('http://localhost:3001/regenerate-draft', {
+                taskId,
+                userTask,
+                factorChoices: await getFactorChoices(),
+                intentCurrent: intents,
+                userName,
+            });
+
+            if (response.data && response.data.draft) {
+                message.success('Draft regenerated successfully.');
+
+                console.log('Regenerated draft:', response.data.draft); // 调试日志
+                await loadLatestDraft(); // 确保调用
+            } else {
+                message.error('Failed to regenerate draft. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error regenerating draft:', error);
+            message.error('Failed to regenerate draft. Please try again.');
+        }
+    };
+
+    // Function to handle edit icon click
+    const handleEdit = (index) => {
+        setEditingIndex(index);
+        setEditingValue(intents[index].value); // Set the current value for editing
+    };
+
+    // Function to handle save icon click
+    const handleSave = (index) => {
+        saveIntent(index, editingValue); // Save the updated value to current.json and history.json
+        setEditingIndex(null); // Exit editing mode
+        setEditingValue(''); // Clear editing value
     };
 
     // Fetch intents when the component mounts or taskId changes
@@ -611,7 +694,7 @@ const ThirdPage = () => {
     };
 
     // Function to save the content to latest.md
-    const handleSave = async () => {
+    const handleSaveDraft = async () => {
         const draftLatest = value
             .map((node) => getNodeText(editor, node))
             .filter((text) => text.trim())
@@ -622,6 +705,9 @@ const ThirdPage = () => {
                 content: draftLatest,
             });
             message.success('Draft saved successfully.');
+
+            // 主动加载最新的草稿内容
+            await loadLatestDraft();
         } catch (error) {
             console.error('Error saving draft:', error);
             message.error('Failed to save draft. Please try again.');
@@ -642,11 +728,217 @@ const ThirdPage = () => {
             });
             message.success('Draft saved successfully.');
 
-            // Navigate to Anchor Builder
-            navigate('/fourth', { state: { userName, taskId, userTask } });
+            // Call the new API endpoint
+            const response = await axios.post('http://localhost:3001/generate-anchor-builder', {
+                userTask,
+                userName,
+                taskId,
+            });
+
+            if (response.data && response.data.anchorData) {
+                // Navigate to Anchor Builder with the generated content
+                navigate('/fourth', {
+                    state: {
+                        userName,
+                        taskId,
+                        userTask,
+                        anchorContent: JSON.stringify(response.data.anchorData), // 将 anchorData 转为字符串传递
+                    },
+                });
+            } else {
+                message.error('Failed to generate anchor content. Please try again.');
+            }
         } catch (error) {
-            console.error('Error saving draft and navigating:', error);
-            message.error('Failed to save draft or navigate. Please try again.');
+            console.error('Error saving draft and generating anchor content:', error);
+            message.error('Failed to save draft or generate anchor content. Please try again.');
+        }
+    };
+
+    // Function to handle aspect selection
+    const handleAspectSelection = (aspectId, type) => {
+        if (type === 'keep') {
+            setAspectsKeep((prev) =>
+                prev.includes(aspectId) ? prev.filter((id) => id !== aspectId) : [...prev, aspectId]
+            );
+        } else if (type === 'change') {
+            setAspectsChange((prev) =>
+                prev.includes(aspectId) ? prev.filter((id) => id !== aspectId) : [...prev, aspectId]
+            );
+        }
+    };
+
+    const handleDirectWriterConfirm = async () => {
+        if (!rewrittenVersion.trim()) {
+            message.error('No rewritten version available to confirm.');
+            return;
+        }
+
+        try {
+            const requestData = {
+                draftLatest: rewrittenVersion,
+                factorChoices: await getFactorChoices(),
+                intentCurrent: intents,
+                selectedContent: selectedText,
+                manualInstruction,
+                userName,
+                taskId,
+            };
+
+            const response = await axios.post('http://localhost:3001/rewrite-intent', requestData);
+
+            if (response.data && response.data.updatedIntents) {
+                // 更新 current.json 和 history.json
+                setIntents(response.data.updatedIntents);
+
+                // 更新 latest.md 文件
+                const draftLatest = value
+                    .map((node) => getNodeText(editor, node))
+                    .filter((text) => text.trim())
+                    .join('\n\n');
+
+                await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
+                    content: draftLatest,
+                });
+
+                // 更新富文本编辑器内容
+                const { selection } = editor;
+                if (selection && selectedText) {
+                    if (Editor.string(editor, selection) === selectedText) {
+                        Transforms.delete(editor, { at: selection });
+                        Transforms.insertText(editor, rewrittenVersion, { at: selection.anchor });
+                    } else {
+                        Transforms.insertText(editor, rewrittenVersion);
+                    }
+                }
+
+                message.success('Intents, latest draft, and editor content updated successfully.');
+            } else {
+                message.error('Failed to update intents. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error in handleDirectWriterConfirm:', error);
+            message.error('Failed to update content. Please try again.');
+        }
+    };
+
+    const handleSelectiveAspectConfirm = async () => {
+        try {
+            const draftLatest = value
+                .map((node) => getNodeText(editor, node))
+                .filter((text) => text.trim())
+                .join('\n\n');
+
+            const requestData = {
+                userTask: userTask || 'Default user task',
+                draftLatest: draftLatest || '',
+                factorChoices: await getFactorChoices(),
+                intentCurrent: intents || [],
+                selectedContent: selectedText || '',
+                aspectsSelectionJson: {
+                    lock: aspectsKeep,
+                    revise: aspectsChange,
+                },
+                manualInstruction: manualInstruction.trim() || '', // 允许为空
+                userName: userName || 'unknown',
+                taskId: taskId || 'unknown',
+            };
+
+            const response = await axios.post('http://localhost:3001/aspect-intent-analyzer', requestData);
+
+            if (response.data && response.data.updatedIntents) {
+                // 更新 current.json 和 history.json
+                setIntents(response.data.updatedIntents);
+
+                // 更新 latest.md 文件
+                await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
+                    content: draftLatest,
+                });
+
+                // 更新富文本编辑器内容
+                const { selection } = editor;
+                if (selection && selectedText) {
+                    if (Editor.string(editor, selection) === selectedText) {
+                        Transforms.delete(editor, { at: selection });
+                        Transforms.insertText(editor, rewrittenVersion, { at: selection.anchor });
+                    } else {
+                        Transforms.insertText(editor, rewrittenVersion);
+                    }
+                }
+
+                message.success('Intents, latest draft, and editor content updated successfully.');
+            } else {
+                message.error('Failed to update intents. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error in handleSelectiveAspectConfirm:', error);
+            message.error('Failed to update content. Please try again.');
+        }
+    };
+
+    const handleAspectRewrite = async () => {
+        setIsLoadingRewrittenVersion(true);
+
+        try {
+            const draftLatest = value
+                .map((node) => getNodeText(editor, node))
+                .filter((text) => text.trim())
+                .join('\n\n');
+
+            const requestData = {
+                userTask: userTask || 'Default user task',
+                draftLatest: draftLatest || '',
+                factorChoices: await getFactorChoices(),
+                intentCurrent: intents || [],
+                selectedContent: selectedText || '',
+                aspectsListJson: aspectsList, // 预定义的 aspects 列表
+                aspectsSelectionJson: {
+                    lock: aspectsKeep,
+                    revise: aspectsChange,
+                },
+                userPrompt: manualInstruction.trim() || '', // 用户输入的指令
+            };
+
+            const response = await axios.post('http://localhost:3001/selective-aspect-rewriter', requestData);
+
+            if (response.data && response.data.rewrittenVersion) {
+                setRewrittenVersion(response.data.rewrittenVersion.trim());
+                message.success('Aspect rewrite generated successfully.');
+            } else {
+                message.error('Failed to generate aspect rewrite. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error in handleAspectRewrite:', error);
+            message.error('Error in handleAspectRewrite. Please try again.');
+        } finally {
+            setIsLoadingRewrittenVersion(false);
+        }
+    };
+
+    const loadLatestDraft = async () => {
+        try {
+            const response = await axios.get(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`);
+            const draftContent = response.data || 'No content available.';
+
+            const slateContent = draftContent
+                .split('\n\n')
+                .filter(paragraph => paragraph.trim())
+                .map((paragraph) => ({
+                    type: 'paragraph',
+                    children: [{ text: paragraph.trim() }],
+                }));
+
+            if (slateContent.length === 0) {
+                slateContent.push({
+                    type: 'paragraph',
+                    children: [{ text: 'No content available.' }],
+                });
+            }
+
+            setValue(slateContent);
+            setEditorKey(prevKey => prevKey + 1); // 强制触发重新渲染
+        } catch (error) {
+            console.error('Failed to load latest draft:', error);
+            message.error('Failed to load latest draft. Please try again.');
         }
     };
 
@@ -660,114 +952,135 @@ const ThirdPage = () => {
             }}
         >
             {/* Main Content */}
-            <div
+            <Row
+                gutter={[16, 16]} // Add spacing between columns
                 style={{
                     flex: 1, // Take up remaining space
+                    height: '100%', // Ensure Row takes full height
                     overflow: 'hidden', // Prevent overflow
-                    display: 'flex',
-                    flexDirection: 'row',
                     padding: '16px',
                 }}
             >
                 {/* Left-side information panel - 4 columns */}
-                <div
-                    style={{
-                        flex: '0 0 25%', // Fixed width for the left panel
-                        paddingRight: '16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '16px',
-                    }}
-                >
-                    <Card
-                        title="Task Information"
-                        size="small"
-                        style={{
-                            flex: '1 1 auto', // Allow resizing
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                        }}
-                        bodyStyle={{
-                            overflowY: 'auto', // Enable scrolling
-                            maxHeight: 'calc(100vh - 200px)', // Adjust height for footer
-                        }}
-                    >
-                        <div style={{ marginBottom: '16px' }}>
-                            <Typography.Text strong>User Name:</Typography.Text>
-                            <div style={{ marginTop: '4px' }}>
-                                <Tag color="blue">{userName || 'N/A'}</Tag>
+                <Col span={6} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    {/* Task Information */}
+                    <div style={{ flex: '0 0 40%', overflow: 'hidden' }}>
+                        <Card
+                            title="Task Information"
+                            size="small"
+                            style={{
+                                height: '100%', // Take full height of the container
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            }}
+                            bodyStyle={{
+                                overflowY: 'auto', // Enable scrolling
+                                height: '100%',
+                            }}
+                        >
+                            <div style={{ marginBottom: '16px' }}>
+                                <Typography.Text strong>User Name:</Typography.Text>
+                                <div style={{ marginTop: '4px' }}>
+                                    <Tag color="blue">{userName || 'N/A'}</Tag>
+                                </div>
                             </div>
-                        </div>
 
-                        <div style={{ marginBottom: '16px' }}>
-                            <Typography.Text strong>Task ID:</Typography.Text>
-                            <div style={{ marginTop: '4px' }}>
-                                <Tag color="green">{taskId || 'N/A'}</Tag>
+                            <div style={{ marginBottom: '16px' }}>
+                                <Typography.Text strong>Task ID:</Typography.Text>
+                                <div style={{ marginTop: '4px' }}>
+                                    <Tag color="green">{taskId || 'N/A'}</Tag>
+                                </div>
                             </div>
-                        </div>
 
-                        <div>
-                            <Typography.Text strong>User Task:</Typography.Text>
-                            <div
-                                style={{
-                                    marginTop: '8px',
-                                    padding: '12px',
-                                    background: '#f8f9fa',
-                                    borderRadius: '6px',
-                                    fontSize: '14px',
-                                    lineHeight: '1.5',
-                                    wordBreak: 'break-word',
-                                }}
-                            >
-                                {userTask || 'No task description available'}
+                            <div>
+                                <Typography.Text strong>User Task:</Typography.Text>
+                                <div
+                                    style={{
+                                        marginTop: '8px',
+                                        padding: '12px',
+                                        background: '#f8f9fa',
+                                        borderRadius: '6px',
+                                        fontSize: '14px',
+                                        lineHeight: '1.5',
+                                        wordBreak: 'break-word',
+                                    }}
+                                >
+                                    {userTask || 'No task description available'}
+                                </div>
                             </div>
-                        </div>
-                    </Card>
+                        </Card>
+                    </div>
 
-                    {/* New Intent Analyzer Card */}
-                    <Card
-                        title="Intent Analyzer"
-                        size="small"
-                        style={{
-                            marginTop: '16px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                            height: '300px', // Fixed height
-                            overflow: 'hidden', // Hide overflow
-                        }}
-                        bodyStyle={{
-                            padding: '12px',
-                            overflowY: 'auto', // Enable vertical scrolling
-                            height: 'calc(100% - 48px)', // Adjust for card header
-                        }}
-                    >
-                        {intents.length > 0 ? (
-                            <ul style={{ paddingLeft: '16px', margin: 0 }}>
-                                {intents.map((intent, index) => (
-                                    <li key={index} style={{ marginBottom: '8px', wordBreak: 'break-word' }}>
-                                        <strong>{intent.dimension}:</strong> {intent.value}
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p style={{ color: '#999', textAlign: 'center' }}>No intents available.</p>
-                        )}
-                    </Card>
-                </div>
-                
+                    {/* Intent Analyzer */}
+                    <div style={{ flex: '0 0 60%', overflow: 'hidden', marginTop: '16px' }}>
+                        <Card
+                            title="Intent Analyzer"
+                            size="small"
+                            style={{
+                                height: '100%', // Take full height of the container
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            }}
+                            bodyStyle={{
+                                padding: '12px',
+                                overflowY: 'auto', // Enable vertical scrolling
+                                height: '100%',
+                            }}
+                            extra={
+                                <Button type="primary" size="small" onClick={handleRegenerateDraft}>
+                                    Regenerate Draft
+                                </Button>
+                            }
+                        >
+                            <List
+                                dataSource={intents}
+                                renderItem={(intent, index) => (
+                                    <List.Item
+                                        key={index}
+                                        actions={[
+                                            editingIndex === index ? (
+                                                <SaveOutlined
+                                                    key="save"
+                                                    onClick={() => handleSave(index)}
+                                                    style={{ color: 'green' }}
+                                                />
+                                            ) : (
+                                                <EditOutlined
+                                                    key="edit"
+                                                    onClick={() => handleEdit(index)}
+                                                    style={{ color: 'blue' }}
+                                                />
+                                            ),
+                                        ]}
+                                    >
+                                        <List.Item.Meta
+                                            title={<AntText strong>{intent.dimension}</AntText>}
+                                            description={
+                                                editingIndex === index ? (
+                                                    <Input
+                                                        value={editingValue}
+                                                        onChange={(e) => setEditingValue(e.target.value)}
+                                                        onPressEnter={() => handleSave(index)}
+                                                    />
+                                                ) : (
+                                                    intent.value
+                                                )
+                                            }
+                                        />
+                                    </List.Item>
+                                )}
+                            />
+                        </Card>
+                    </div>
+                </Col>
+
                 {/* Right-side editor - 20 columns */}
-                <div
-                    style={{
-                        flex: '1 1 75%', // Take up remaining space
-                        display: 'flex',
-                        flexDirection: 'column',
-                    }}
-                >
+                <Col span={18} style={{ height: '100%' }}>
                     <Card
                         title={
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span>Email Draft Editor</span>
                                 <div>
                                     <button
-                                        onClick={handleSave}
+                                        onClick={handleSaveDraft}
                                         style={{
                                             padding: '4px 8px',
                                             background: '#1890ff',
@@ -798,12 +1111,12 @@ const ThirdPage = () => {
                         }
                         size="small"
                         style={{
-                            flex: '1 1 auto', // Allow resizing
+                            height: '100%', // Take full height of the container
                             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                         }}
                         bodyStyle={{
                             overflowY: 'auto', // Enable scrolling
-                            maxHeight: 'calc(100vh - 200px)', // Adjust height for footer
+                            height: '100%',
                         }}
                     >
                         {contentLoaded ? (
@@ -813,6 +1126,7 @@ const ThirdPage = () => {
                                     overflow: 'hidden',
                                 }}>
                                     <Slate
+                                        key={editorKey}
                                         editor={editor}
                                         initialValue={value}
                                         onChange={(newValue) => setValue(newValue)}
@@ -825,6 +1139,7 @@ const ThirdPage = () => {
                                             renderElement={renderElement}
                                             renderLeaf={renderLeaf}
                                             onKeyDown={handleKeyDown}
+                                            onContextMenu={handleContextMenu}
                                             placeholder={loading ? 'Loading...' : 'Start typing...'}
                                             style={{
                                                 padding: '16px',
@@ -833,7 +1148,7 @@ const ThirdPage = () => {
                                             }}
                                         />
                                     </Slate>
-                        </div>
+                                </div>
                             </Dropdown>
                         ) : (
                             <div
@@ -848,11 +1163,11 @@ const ThirdPage = () => {
                                 }}
                             >
                                 Loading content...
-                        </div>
-                    )}
+                            </div>
+                        )}
                     </Card>
-                </div>
-            </div>
+                </Col>
+            </Row>
 
             {/* Footer */}
             <div
@@ -919,114 +1234,20 @@ const ThirdPage = () => {
                 title="Direct Rewriter Agent"
                 visible={isDirectRewriterModalVisible}
                 onCancel={() => setIsDirectRewriterModalVisible(false)}
-                footer={[
-                    <button
-                        key="cancel"
-                        onClick={() => setIsDirectRewriterModalVisible(false)}
-                        style={{
-                            padding: '8px 16px',
-                            background: '#f5f5f5',
-                            color: '#000',
-                            border: '1px solid #d9d9d9',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            marginRight: '8px',
-                        }}
-                    >
-                        Cancel
-                    </button>,
-                    <button
-                        key="confirm"
-                        onClick={async () => {
-                            if (!rewrittenVersion.trim()) {
-                                message.error('No rewritten version available to confirm.');
-                                return;
-                            }
-
-                            setIsLoadingRewrittenVersion(true);
-
-                            try {
-                                // Fetch real data for factor choices and current intents
-                                const factorChoices = await getFactorChoices();
-                                const intentCurrent = await getIntentCurrent();
-
-                                // Get the current editor content
-                                const draftLatest = value
-                                    .map((node) => getNodeText(editor, node))
-                                    .filter((text) => text.trim())
-                                    .join('\n\n');
-
-                                // Prepare the data for the request
-                                const requestData = {
-                                    draftLatest,
-                                    factorChoices,
-                                    intentCurrent,
-                                    selectedContent: selectedText,
-                                    manualInstruction,
-                                    userName,
-                                    taskId,
-                                };
-
-                                console.log('Sending request to /rewrite-intent with data:', requestData);
-
-                                // Send the request to the server
-                                const response = await axios.post('http://localhost:3001/rewrite-intent', requestData);
-
-                                if (response.data && response.data.updatedIntents) {
-                                    message.success('Intents updated successfully.');
-                                    console.log('Updated intents:', response.data.updatedIntents);
-
-                                    // Replace the selected text with the rewritten version in the editor
-                                    const { selection } = editor;
-                                    if (selection && selectedText) {
-                                        try {
-                                            if (Editor.string(editor, selection) === selectedText) {
-                                                Transforms.delete(editor, { at: selection });
-                                                Transforms.insertText(editor, rewrittenVersion, { at: selection.anchor });
-                                            } else {
-                                                Transforms.insertText(editor, rewrittenVersion);
-                                            }
-                                        } catch (transformError) {
-                                            console.warn('Error replacing text in editor:', transformError);
-                                            Transforms.insertText(editor, rewrittenVersion); // Fallback
-                                        }
-                                    }
-
-                                    // Update latest.md with the new content
-                                    const updatedDraft = value
-                                        .map((node) => getNodeText(editor, node))
-                                        .filter((text) => text.trim())
-                                        .join('\n\n');
-
-                                    await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
-                                        content: updatedDraft,
-                                    });
-
-                                    message.success('Latest draft updated successfully.');
-                                } else {
-                                    message.error('Failed to update intents. Please try again.');
-                                }
-                            } catch (error) {
-                                console.error('Error during confirm action:', error);
-                                message.error('An error occurred. Please try again.');
-                            } finally {
-                                setIsLoadingRewrittenVersion(false);
-                                setIsDirectRewriterModalVisible(false);
-                            }
-                        }}
-                        style={{
-                            padding: '8px 16px',
-                            background: '#52c41a',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                        }}
-                        disabled={!rewrittenVersion.trim()}
-                    >
-                        Confirm
-                    </button>,
-                ]}
+                onOk={async () => {
+                    setDirectRewriterLoading(true); // Start loading
+                    try {
+                        await handleDirectWriterConfirm(); // Execute confirm logic
+                        setIsDirectRewriterModalVisible(false); // Close modal
+                    } catch (error) {
+                        console.error('Error in Direct Rewriter Confirm:', error);
+                        message.error('Failed to confirm. Please try again.');
+                    } finally {
+                        setDirectRewriterLoading(false); // Stop loading
+                    }
+                }}
+                confirmLoading={directRewriterLoading} // Bind loading state to confirm button
+                okButtonProps={{ disabled: !rewrittenVersion.trim() }}
                 width={{
                     xs: '90%',
                     sm: '80%',
@@ -1037,55 +1258,150 @@ const ThirdPage = () => {
                 }}
             >
                 <p><strong>Selected Content:</strong> {selectedText}</p>
-                <div style={{ marginBottom: '16px' }}>
-                    <strong>Your Manual Instruction:</strong>
-                    <input
-                        type="text"
-                        placeholder="Please input your free-form instruction for AI agent to rewrite the selected content"
-                        value={manualInstruction}
-                        onChange={(e) => setManualInstruction(e.target.value)}
-                        style={{
-                            width: '100%',
-                            padding: '8px',
-                            marginTop: '8px',
-                            border: '1px solid #d9d9d9',
-                            borderRadius: '4px',
-                        }}
-                    />
-                        </div>
-                <button
+                <Input.TextArea
+                    placeholder="Enter your manual instruction"
+                    value={manualInstruction}
+                    onChange={(e) => setManualInstruction(e.target.value)}
+                    rows={4}
+                />
+                <Button
+                    type="primary"
                     onClick={handleRewrite}
-                    style={{
-                        padding: '8px 16px',
-                        background: '#1890ff',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        marginBottom: '16px',
-                    }}
+                    style={{ marginTop: '16px' }}
                 >
                     Rewrite
-                </button>
-                            <div>
-                    <strong>Rewritten Version:</strong>
+                </Button>
+                {isLoadingRewrittenVersion ? (
+                    <Spin tip="Loading rewritten version..." />
+                ) : (
+                    <div style={{ marginTop: '16px', padding: '12px', background: '#f8f9fa', borderRadius: '4px' }}>
+                        {rewrittenVersion || 'No rewritten version available.'}
+                    </div>
+                )}
+            </Modal>
+
+            {/* Selective Aspect Rewriter Modal */}
+            <Modal
+                title="Selective Aspect Rewriter"
+                visible={isSelectiveAspectRewriterModalVisible}
+                onCancel={() => setIsSelectiveAspectRewriterModalVisible(false)}
+                onOk={async () => {
+                    setSelectiveAspectLoading(true); // Start loading
+                    try {
+                        await handleSelectiveAspectConfirm(); // Execute confirm logic
+                        setIsSelectiveAspectRewriterModalVisible(false); // Close modal
+                    } catch (error) {
+                        console.error('Error in Selective Aspect Confirm:', error);
+                        message.error('Failed to confirm. Please try again.');
+                    } finally {
+                        setSelectiveAspectLoading(false); // Stop loading
+                    }
+                }}
+                confirmLoading={selectiveAspectLoading} // Bind loading state to confirm button
+                okButtonProps={{ disabled: !rewrittenVersion.trim() }}
+                width="70%"
+            >
+                <p><strong>Selected Content:</strong> {selectedText}</p>
+
+                {/* 功能提示 */}
+                <Alert
+                    message="Support Multi-aspect Control"
+                    description="Users can select multiple predefined aspects to 'keep' (locked), and multiple aspects to 'change' (editable), with optional additional prompt instructions for nuance."
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: '16px' }}
+                />
+
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                    {/* Aspects (Keep) */}
+                    <Card
+                        title="Aspects (Keep)"
+                        size="small"
+                        style={{ flex: 1 }}
+                        bodyStyle={{ maxHeight: '300px', overflowY: 'auto' }}
+                    >
+                        <Checkbox.Group
+                            value={aspectsKeep}
+                            onChange={(checkedValues) => setAspectsKeep(checkedValues)}
+                        >
+                            {aspectsList.map((aspect) => (
+                                <div key={aspect.id} style={{ marginBottom: '12px' }}>
+                                    <Checkbox value={aspect.id}>
+                                        <Typography.Text strong>{aspect.title}</Typography.Text>
+                                        <br />
+                                        <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                                            {aspect.description}
+                                        </Typography.Text>
+                                    </Checkbox>
+                                </div>
+                            ))}
+                        </Checkbox.Group>
+                    </Card>
+
+                    {/* Aspects (Change) */}
+                    <Card
+                        title="Aspects (Change)"
+                        size="small"
+                        style={{ flex: 1 }}
+                        bodyStyle={{ maxHeight: '300px', overflowY: 'auto' }}
+                    >
+                        <Checkbox.Group
+                            value={aspectsChange}
+                            onChange={(checkedValues) => setAspectsChange(checkedValues)}
+                        >
+                            {aspectsList.map((aspect) => (
+                                <div key={aspect.id} style={{ marginBottom: '12px' }}>
+                                    <Checkbox value={aspect.id}>
+                                        <Typography.Text strong>{aspect.title}</Typography.Text>
+                                        <br />
+                                        <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                                            {aspect.description}
+                                        </Typography.Text>
+                                    </Checkbox>
+                                </div>
+                            ))}
+                        </Checkbox.Group>
+                    </Card>
+                </div>
+
+                {/* Additional Prompt Instructions */}
+                <Card
+                    title="Additional Prompt Instructions"
+                    size="small"
+                    style={{ marginBottom: '16px' }}
+                >
+                    <Input.TextArea
+                        placeholder="Enter additional instructions for nuance"
+                        value={manualInstruction}
+                        onChange={(e) => setManualInstruction(e.target.value)}
+                        rows={3}
+                    />
+                </Card>
+
+                {/* Rewrite Button */}
+                <Button
+                    type="primary"
+                    onClick={handleAspectRewrite}
+                    disabled={aspectsKeep.length === 0 && aspectsChange.length === 0}
+                    style={{ marginBottom: '16px' }}
+                >
+                    Aspect Rewrite
+                </Button>
+
+                {/* Rewritten Version */}
+                <Card
+                    title="Rewritten Version"
+                    size="small"
+                    bodyStyle={{ minHeight: '100px' }}
+                >
                     {isLoadingRewrittenVersion ? (
                         <Spin tip="Loading rewritten version..." />
                     ) : (
-                        <div
-                            style={{
-                                marginTop: '8px',
-                                padding: '12px',
-                                background: '#f8f9fa',
-                                borderRadius: '4px',
-                                border: '1px solid #d9d9d9',
-                                minHeight: '100px',
-                            }}
-                        >
+                        <Typography.Text>
                             {rewrittenVersion || 'No rewritten version available.'}
-                            </div>
-                        )}
-                    </div>
+                        </Typography.Text>
+                    )}
+                </Card>
             </Modal>
         </div>
     );

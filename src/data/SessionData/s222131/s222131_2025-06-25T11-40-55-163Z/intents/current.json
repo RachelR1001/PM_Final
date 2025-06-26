@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Nature of incident requiring apology",
+    "value": "Student-related error (academic, scheduling, etc.)"
+  },
+  {
+    "dimension": "Desired outcome beyond apology",
+    "value": "Seek understanding and potential mitigation of consequences"
+  },
+  {
+    "dimension": "Level of detail regarding reason",
+    "value": "Brief, honest explanation without making excuses"
+  },
+  {
+    "dimension": "Tone nuance",
+    "value": "Respectful and sincere, balanced between formal and familiar"
+  },
+  {
+    "dimension": "Underlying request/need after apology",
+    "value": "Implicit need for guidance on next steps or acceptance of proposed solution"
+  }
+]

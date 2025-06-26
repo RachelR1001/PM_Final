@@ -1,0 +1,23 @@
+[
+  {
+    "id": "power_difference",
+    "title": "Power, resource, status, hierarchy difference",
+    "options": [
+      "Receiver is higher"
+    ]
+  },
+  {
+    "id": "familiarity",
+    "title": "Familiarity",
+    "options": [
+      "Familiar"
+    ]
+  },
+  {
+    "id": "maintain_relationship",
+    "title": "Needs for Maintaining relationship",
+    "options": [
+      "Remain the same"
+    ]
+  }
+]

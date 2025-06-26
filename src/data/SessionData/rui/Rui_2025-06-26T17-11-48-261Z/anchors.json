@@ -1,0 +1,10 @@
+{
+  "persona": {
+    "title": "Partners Exploring Integrations",
+    "description": "This group consists of technical and business professionals from partner companies interested in integrating their systems via our API. They are evaluating possibilities, working on existing integrations, or discussing technical collaboration opportunities. Their focus is on compatibility, roadmap alignment, and mutual technical benefits."
+  },
+  "situation": {
+    "title": "Partnership & API Integration Updates",
+    "description": "This communication takes place within the context of managing and developing technical partnerships focused on API integrations. The user is providing updates on the integration roadmap, technical capabilities, and opportunities for collaboration. The purpose is to keep partners informed, gather feedback, and strengthen technical partnership ties."
+  }
+}

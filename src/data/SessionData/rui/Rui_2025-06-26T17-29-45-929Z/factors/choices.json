@@ -1,0 +1,23 @@
+[
+  {
+    "id": "mistake_side",
+    "title": "The mistake is more on which side?",
+    "options": [
+      "Our side"
+    ]
+  },
+  {
+    "id": "you_want_receiver_feel",
+    "title": "You want the receiver to feel you are",
+    "options": [
+      "Apology / Regret 😔"
+    ]
+  },
+  {
+    "id": "occasion",
+    "title": "Occasion",
+    "options": [
+      "school issues"
+    ]
+  }
+]

@@ -1,0 +1,85 @@
+[
+  {
+    "ts": "2025-06-25T12:16:31.324Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Recipient's Specific Role",
+      "value": "Academic/Professional Mentor"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:16:31.325Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Specificity of Gratitude",
+      "value": "Directed towards a specific action or support"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:16:31.325Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Desired Action from Receiver",
+      "value": "Passive acknowledgment or filing of email (no reply needed)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:16:31.325Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Purpose beyond Gratitude",
+      "value": "Strengthening relationship for potential future interaction (e.g., reference letter)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:16:31.326Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Recency of Event Causing Gratitude",
+      "value": "Likely recent (within semester/academic period)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:16:43.506Z",
+    "action": "manual-update",
+    "prev": {
+      "dimension": "Recipient's Specific Role",
+      "value": "Academic"
+    },
+    "next": {
+      "dimension": "Recipient's Specific Role",
+      "value": "Academic"
+    },
+    "source": "userUI > manual",
+    "actor": "user"
+  },
+  {
+    "ts": "2025-06-25T12:21:27.262Z",
+    "action": "manual-update",
+    "prev": {
+      "dimension": "Recipient's Specific Role",
+      "value": "Academic"
+    },
+    "next": {
+      "dimension": "Recipient's Specific Role",
+      "value": "Academic"
+    },
+    "source": "userUI > manual",
+    "actor": "user"
+  }
+]

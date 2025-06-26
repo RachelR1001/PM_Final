@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-06-25T11:28:04.526Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Primary Communication Goal",
+      "value": "Address a specific academic matter requiring professor's input/action."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T11:28:04.527Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Expected Nature of Content",
+      "value": "Detailed and precise regarding the academic responsibility or status."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T11:28:04.527Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Desired Outcome",
+      "value": "A clear response or action from the professor to resolve or advance the academic matter."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T11:28:04.527Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Implied Urgency/Importance",
+      "value": "Topic is likely significant to academic progress or standing."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T11:28:04.528Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Focus on Efficiency",
+      "value": "Structured to facilitate quick understanding and response by the professor."
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Email Purpose",
+    "value": "Transactional/Concluding (seeking finality)"
+  },
+  {
+    "dimension": "Desired Outcome",
+    "value": "Resolution allowing minimal future required interaction"
+  },
+  {
+    "dimension": "Tone Requirement",
+    "value": "Polite, respectful, yet direct enough to achieve goal"
+  },
+  {
+    "dimension": "Handling Potential Friction",
+    "value": "Navigating a situation that might otherwise prolong contact or create conflict"
+  },
+  {
+    "dimension": "User's Underlying Goal",
+    "value": "Closing a chapter or achieving closure with this professor/course/project"
+  }
+]

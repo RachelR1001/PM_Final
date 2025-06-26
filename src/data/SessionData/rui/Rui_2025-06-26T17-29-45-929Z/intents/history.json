@@ -1,0 +1,105 @@
+[
+  {
+    "ts": "2025-06-26T17:31:07.483Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Supervisor's expected contribution level",
+      "value": "Significant (hence omission is a major error)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:31:07.483Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Potential impact on supervisor",
+      "value": "Missed academic recognition/credit"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:31:07.484Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "User's underlying feeling",
+      "value": "Deep personal embarrassment/anxiety about the oversight"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:31:07.484Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Desired outcome beyond apology",
+      "value": "Mitigation of relationship damage and reassurance for future collaborations"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:31:07.484Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Contextual urgency",
+      "value": "Immediate communication required due to final paper acceptance status"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:31:34.700Z",
+    "action": "manual-update",
+    "prev": {
+      "dimension": "User's underlying feeling",
+      "value": "Deep personal embarrassment/anxiety about the oversight"
+    },
+    "next": {
+      "dimension": "User's underlying feeling",
+      "value": "Deep personal embarrassment"
+    },
+    "source": "userUI > manual",
+    "actor": "user"
+  },
+  {
+    "ts": "2025-06-26T17:32:08.590Z",
+    "action": "change",
+    "prev": {
+      "dimension": "User's underlying feeling",
+      "value": "Deep personal embarrassment"
+    },
+    "next": {
+      "dimension": "User's underlying feeling",
+      "value": "Regret and embarrassment (with proactive step)"
+    },
+    "source": "AI › VariationIntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:32:43.862Z",
+    "action": "add",
+    "next": {
+      "dimension": "custom",
+      "value": "This was a completely unintentional error on my part, for which I am deeply sorry"
+    },
+    "source": "AI › RewriteIntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T17:33:15.764Z",
+    "action": "add",
+    "next": {
+      "dimension": "custom",
+      "value": "Considering the final acceptance status of the paper, I wanted to ensure you were informed of this situation without delay."
+    },
+    "source": "AI › AspectIntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

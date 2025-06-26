@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Primary Subject Matter",
+    "value": "Query or request related to the specific course or academic standing"
+  },
+  {
+    "dimension": "Desired Outcome from Professor",
+    "value": "Information, clarification, permission, or scheduling"
+  },
+  {
+    "dimension": "Level of Detail Required",
+    "value": "Sufficient detail for the professor to understand the context without excessive background"
+  },
+  {
+    "dimension": "Urgency Level",
+    "value": "Standard academic timeline, not immediate emergency unless specified"
+  },
+  {
+    "dimension": "Required Tone Subtleties",
+    "value": "Respectful, clear, and concise, avoiding demanding language"
+  }
+]

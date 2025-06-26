@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-06-25T09:45:12.724Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Likely Topic Area",
+      "value": "Student's supervised academic progress or related activity"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T09:45:12.725Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Tone",
+      "value": "Respectfully professional with established comfortable rapport"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T09:45:12.726Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Assumed Shared Context",
+      "value": "Significant background knowledge of the student's work"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T09:45:12.726Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Recipient's Role",
+      "value": "Academic advisor providing guidance or action"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T09:45:12.726Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Communication Style",
+      "value": "Direct but appreciative of the ongoing relationship"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

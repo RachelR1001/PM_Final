@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Primary Communication Goal",
+    "value": "Address a specific academic matter requiring professor's input/action."
+  },
+  {
+    "dimension": "Expected Nature of Content",
+    "value": "Detailed and precise regarding the academic responsibility or status."
+  },
+  {
+    "dimension": "Desired Outcome",
+    "value": "A clear response or action from the professor to resolve or advance the academic matter."
+  },
+  {
+    "dimension": "Implied Urgency/Importance",
+    "value": "Topic is likely significant to academic progress or standing."
+  },
+  {
+    "dimension": "Focus on Efficiency",
+    "value": "Structured to facilitate quick understanding and response by the professor."
+  }
+]

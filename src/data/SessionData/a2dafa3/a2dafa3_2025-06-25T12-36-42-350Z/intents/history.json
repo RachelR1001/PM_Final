@@ -1,0 +1,85 @@
+[
+  {
+    "ts": "2025-06-25T12:37:05.234Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Purpose of Email",
+      "value": "Related to formal academic/university event, announcement, or official request"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:37:05.235Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Sender's Role",
+      "value": "Likely acting in a formal capacity (e.g., student rep, club officer, research assistant)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:37:05.235Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Specific Context",
+      "value": "Formal event organization, official university/department communication, or formal group announcement"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:37:05.235Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Required Content",
+      "value": "Official details, potentially involving dates, times, locations, or formal procedures"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:37:05.236Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Desired Outcome",
+      "value": "Inform, request participation/action for a formal matter, or make an official announcement"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-25T12:37:55.125Z",
+    "action": "manual-update",
+    "prev": {
+      "dimension": "Required Content",
+      "value": "Official details, potentially involving dates, times, locations, or formal procedures"
+    },
+    "next": {
+      "dimension": "Required Content",
+      "value": "Official details"
+    },
+    "source": "userUI > manual",
+    "actor": "user"
+  },
+  {
+    "ts": "2025-06-25T12:40:40.657Z",
+    "action": "manual-update",
+    "prev": {
+      "dimension": "Purpose of Email",
+      "value": "Related to formal academic/university event, announcement, or official request"
+    },
+    "next": {
+      "dimension": "Purpose of Email",
+      "value": "Related to formal academic/university event, announcement"
+    },
+    "source": "userUI > manual",
+    "actor": "user"
+  }
+]

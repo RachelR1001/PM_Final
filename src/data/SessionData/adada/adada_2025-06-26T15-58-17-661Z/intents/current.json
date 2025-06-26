@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Likely Subject Matter Category",
+    "value": "Academic-related query or request"
+  },
+  {
+    "dimension": "Inferred Communication Style",
+    "value": "Professional, comfortable, and respectful"
+  },
+  {
+    "dimension": "Assumed Prior Context",
+    "value": "Professor recognizes student and relevant academic area"
+  },
+  {
+    "dimension": "Probable Desired Professor Action",
+    "value": "Provide information, guidance, or schedule meeting"
+  },
+  {
+    "dimension": "Underlying Student Stance",
+    "value": "Seeks productive engagement, not conflict"
+  }
+]

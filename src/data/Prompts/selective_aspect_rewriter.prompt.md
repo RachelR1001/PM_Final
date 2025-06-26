@@ -21,6 +21,8 @@ You are an expert email editor. Your task is to revise part of an email accordin
 **User’s aspect selection:**  
 {{ASPECTS_SELECTION_JSON}}
 
+**User instruction:**  
+{{USER_PROMPT}}
 ---
 
 **Instructions:**

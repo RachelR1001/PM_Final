@@ -60,7 +60,7 @@ const App = () => {
                                 },
                                 {
                                     key: '4',
-                                    label: <Link to="/forth">Anchor Builder</Link>,
+                                    label: <Link to="/fourth">Anchor Builder</Link>,
                                 },
                             ]}
                         />

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "power_difference",
+    "title": "Power, resource, status, hierarchy difference",
+    "options": [
+      "Receiver is higher"
+    ]
+  },
+  {
+    "id": "familiarity",
+    "title": "Familiarity",
+    "options": [
+      "Knows each other but unfamiliar"
+    ]
+  },
+  {
+    "id": "promptness",
+    "title": "Promptness",
+    "options": [
+      "Urgent"
+    ]
+  }
+]

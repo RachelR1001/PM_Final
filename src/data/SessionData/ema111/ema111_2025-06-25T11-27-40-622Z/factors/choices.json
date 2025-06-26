@@ -1,0 +1,30 @@
+[
+  {
+    "id": "relationship_type",
+    "title": "Relationship type",
+    "options": [
+      "Supervisor and Student"
+    ]
+  },
+  {
+    "id": "occasion",
+    "title": "Occasion",
+    "options": [
+      "Formal: Communication related to academic responsibilities or status."
+    ]
+  },
+  {
+    "id": "maintain_relationship",
+    "title": "Needs for Maintaining relationship",
+    "options": [
+      "Remain the same (maintaining professional relationship)"
+    ]
+  },
+  {
+    "id": "you_want_avoid_receiver_feel",
+    "title": "You want to avoid the receiver from feeling you are",
+    "options": [
+      "Avoid Disrespectful / Casual 😡"
+    ]
+  }
+]

@@ -6,7 +6,7 @@ const path = require('path');
 const app = express();
 const port = 3001;
 
-const geminiApiKey = 'AIzaSyDXvd4T2bsK0cV2bTYbHiR5guCKFDe3g1M'; // Gemini API Key
+const geminiApiKey = 'AIzaSyDim8J8xzRTmPl1ve98-gQq8UueGZhH9s8'; // Gemini API Key
 const geminiApiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiApiKey}`;
 
 const factorList = require('../data/PredefinedData/factor_list.json'); // 引用 factor_list.json
@@ -74,6 +74,7 @@ async function sendRequestToGemini(prompt, options = {}) {
                 headers: {
                     'Content-Type': 'application/json',
                 }
+
             });
 
             console.log('Gemini API Response:', response.data);
@@ -710,8 +711,13 @@ app.post('/direct-rewriter', async (req, res) => {
         taskId,
     } = req.body;
 
-    if (!draftLatest || !factorChoices || !intentCurrent || !selectedContent || !manualInstruction) {
+    if (!draftLatest || !factorChoices || !intentCurrent || !selectedContent) {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    // manualInstruction 可以为空
+    if (manualInstruction === undefined) {
+        manualInstruction = '';
     }
 
     const promptPath = path.join(__dirname, '../data/Prompts/prompt_AI_rewrite.prompt.md');
@@ -857,6 +863,481 @@ app.post('/rewrite-intent', async (req, res) => {
     } catch (error) {
         console.error('Error in Rewrite Intent:', error);
         res.status(500).json({ error: 'Error in Rewrite Intent: ' + error.message });
+    }
+});
+
+app.post('/selective-aspect-rewriter', async (req, res) => {
+    const { userTask, draftLatest, factorChoices, intentCurrent, selectedContent, aspectsListJson, aspectsSelectionJson, userPrompt } = req.body;
+
+    const promptPath = path.join(__dirname, '../data/Prompts/selective_aspect_rewriter.prompt.md');
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('加载 prompt 文件失败:', error);
+        return res.status(500).json({ error: '加载 prompt 文件失败' });
+    }
+
+    // 替换占位符
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', userTask)
+        .replace('{{DRAFT_LATEST}}', draftLatest)
+        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices))
+        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent))
+        .replace('{{SELECTED_CONTENT}}', selectedContent)
+        .replace('{{ASPECTS_LIST_JSON}}', JSON.stringify(aspectsListJson))
+        .replace('{{ASPECTS_SELECTION_JSON}}', JSON.stringify(aspectsSelectionJson))
+        .replace('{{USER_PROMPT}}', userPrompt);
+
+    try {
+        // 调用 AI 服务
+        const rewrittenVersion = await sendRequestToGemini(prompt);
+
+        if (!rewrittenVersion) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        res.json({ rewrittenVersion: rewrittenVersion.trim() });
+    } catch (error) {
+        console.error('Error in Selective Aspect Rewriter:', error);
+        res.status(500).json({ error: 'Error in Selective Aspect Rewriter' });
+    }
+});
+
+app.post('/aspect-intent-analyzer', async (req, res) => {
+    const {
+        userTask,
+        draftLatest,
+        factorChoices,
+        intentCurrent,
+        selectedContent,
+        aspectsSelectionJson,
+        userName,
+        taskId,
+    } = req.body;
+
+    if (
+        !userTask ||
+        !draftLatest ||
+        !factorChoices ||
+        !intentCurrent ||
+        !selectedContent ||
+        !aspectsSelectionJson ||
+        !userName ||
+        !taskId
+    ) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/selective_aspect_rewriter.prompt.md');
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load selective_aspect_rewriter.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', userTask)
+        .replace('{{DRAFT_LATEST}}', draftLatest)
+        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
+        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2))
+        .replace('{{SELECTED_CONTENT}}', selectedContent)
+        .replace('{{ASPECTS_SELECTION_JSON}}', JSON.stringify(aspectsSelectionJson));
+
+    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+
+    try {
+        // Enable thinking budget for this request
+        const responseText = await sendRequestToGemini(prompt, { enableThinking: true });
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        console.log('Raw AI Response:', responseText);
+
+        let parsedData;
+        try {
+            const jsonContent = responseText.replace(/```json|```/g, ''); // Remove Markdown formatting
+            parsedData = JSON.parse(jsonContent);
+        } catch (error) {
+            console.warn('AI response is not valid JSON. Using plain text response instead.');
+            parsedData = [{ action: 'add', next: { dimension: 'custom', value: responseText.trim() } }];
+        }
+
+        let currentIntents = [];
+        if (fs.existsSync(intentsPath)) {
+            try {
+                currentIntents = JSON.parse(fs.readFileSync(intentsPath, 'utf-8'));
+            } catch (error) {
+                console.error('Error reading current intents:', error);
+            }
+        }
+
+        if (Array.isArray(parsedData)) {
+            parsedData.forEach((instruction) => {
+                const { action, prev, next } = instruction;
+
+                saveIntentHistory(
+                    userName,
+                    taskId,
+                    action,
+                    prev,
+                    next,
+                    'AI › AspectIntentAnalyzer v1',
+                    'AI'
+                );
+
+                if (action === 'add') {
+                    currentIntents.push(next);
+                } else if (action === 'remove') {
+                    currentIntents = currentIntents.filter(
+                        (intent) => !(intent.dimension === prev.dimension && intent.value === prev.value)
+                    );
+                } else if (action === 'change') {
+                    currentIntents = currentIntents.map((intent) =>
+                        intent.dimension === prev.dimension && intent.value === prev.value ? next : intent
+                    );
+                }
+            });
+        }
+
+        const intentsDir = path.dirname(intentsPath);
+        if (!fs.existsSync(intentsDir)) {
+            fs.mkdirSync(intentsDir, { recursive: true });
+        }
+
+        fs.writeFileSync(intentsPath, JSON.stringify(currentIntents, null, 2));
+
+        res.json({ updatedIntents: currentIntents });
+    } catch (error) {
+        console.error('Error in Aspect Intent Analyzer:', error);
+        res.status(500).json({ error: 'Error in Aspect Intent Analyzer: ' + error.message });
+    }
+});
+
+// ... existing code ...
+
+// 手动更新 intent 的接口
+app.post('/sessiondata/:taskId/intents/manual-update', (req, res) => {
+    const { taskId } = req.params;
+    const { updatedIntent, prevIntent } = req.body; // 从请求体中获取更新后的 intent 和之前的 intent
+    const userName = taskId.split('_')[0]; // 假设 taskId 格式为 userName_timestamp
+
+    // 构建文件路径
+    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+    const historyPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'history.json');
+
+    try {
+        // 更新 current.json
+        let currentIntents = [];
+        if (fs.existsSync(intentsPath)) {
+            currentIntents = JSON.parse(fs.readFileSync(intentsPath, 'utf-8'));
+        }
+
+        // 查找并更新对应的 intent
+        const updatedIntents = currentIntents.map((intent) =>
+            intent.dimension === prevIntent.dimension && intent.value === prevIntent.value
+                ? updatedIntent
+                : intent
+        );
+
+        // 保存到 current.json
+        fs.writeFileSync(intentsPath, JSON.stringify(updatedIntents, null, 2), 'utf-8');
+
+        // 更新 history.json
+        let history = [];
+        if (fs.existsSync(historyPath)) {
+            history = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+        }
+
+        const historyEntry = {
+            ts: new Date().toISOString(),
+            action: 'manual-update',
+            prev: prevIntent,
+            next: updatedIntent,
+            source: 'userUI > manual',
+            actor: 'user',
+        };
+
+        history.push(historyEntry);
+
+        // 保存到 history.json
+        fs.writeFileSync(historyPath, JSON.stringify(history, null, 2), 'utf-8');
+
+        res.status(200).json({ message: 'Intent updated successfully.' });
+    } catch (error) {
+        console.error('Error updating intent:', error);
+        res.status(500).json({ error: 'Failed to update intent.' });
+    }
+});
+
+// ... existing code ...
+
+// Regenerate Draft 接口
+app.post('/regenerate-draft', async (req, res) => {
+    const { taskId, userTask, factorChoices, intentCurrent, userName } = req.body;
+
+    if (!taskId || !userTask || !factorChoices || !intentCurrent || !userName) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/email_regenerator.prompt.md');
+    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts');
+    const latestDraftPath = path.join(draftsPath, 'latest.md');
+
+    let promptTemplate;
+    try {
+        // 读取 prompt 文件
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load email_regenerator.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    // 替换占位符生成 prompt
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', userTask)
+        .replace('{{DRAFT_LATEST}}', fs.existsSync(latestDraftPath) ? fs.readFileSync(latestDraftPath, 'utf-8') : '')
+        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
+        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2))
+        .replace('{{INTENT_HISTORY}}', '[]'); // 可扩展为实际历史记录
+
+    try {
+        // 调用 AI 服务生成草稿
+        const draftContent = await sendRequestToGemini(prompt);
+
+        if (!draftContent) {
+            throw new Error('AI response is empty');
+        }
+
+        // 确保 drafts 目录存在
+        if (!fs.existsSync(draftsPath)) {
+            fs.mkdirSync(draftsPath, { recursive: true });
+        }
+
+        // 保存到 latest.md
+        fs.writeFileSync(latestDraftPath, draftContent.trim(), 'utf-8');
+
+        // 按次序创建类似 01_draft.md 的文件
+        const draftFiles = fs.readdirSync(draftsPath).filter((file) => file.match(/^\d+_draft\.md$/));
+        const nextDraftNumber = draftFiles.length + 1;
+        const nextDraftPath = path.join(draftsPath, `${String(nextDraftNumber).padStart(2, '0')}_draft.md`);
+        fs.writeFileSync(nextDraftPath, draftContent.trim(), 'utf-8');
+
+        res.status(200).json({ message: 'Draft regenerated successfully.', draft: draftContent.trim() });
+    } catch (error) {
+        console.error('Error regenerating draft:', error);
+        res.status(500).json({ error: 'Failed to regenerate draft.' });
+    }
+});
+
+app.post('/generate-anchor-builder', async (req, res) => {
+    const { userTask, userName, taskId } = req.body;
+
+    if (!userTask || !userName || !taskId) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/anchor_builder.prompt.md');
+    const anchorFilePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'anchors.json');
+
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load anchor_builder.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    const prompt = promptTemplate.replace('{{USER_TASK}}', userTask);
+
+    try {
+        const responseText = await sendRequestToGemini(prompt,  { enableThinking: true });
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        // Parse the response into JSON format
+        const sanitizedContent = responseText.replace(/```json|```/g, ''); // Remove Markdown-style code block delimiters
+        let anchorData;
+        try {
+            anchorData = JSON.parse(sanitizedContent);
+        } catch (error) {
+            console.error('Failed to parse AI response as JSON:', error);
+            return res.status(500).json({ error: 'Failed to parse AI response as JSON' });
+        }
+
+        // Ensure the directory exists
+        const anchorDir = path.dirname(anchorFilePath);
+        if (!fs.existsSync(anchorDir)) {
+            fs.mkdirSync(anchorDir, { recursive: true });
+        }
+
+        // Write the anchor data to anchors.json
+        try {
+            fs.writeFileSync(anchorFilePath, JSON.stringify(anchorData, null, 2), 'utf-8');
+        } catch (error) {
+            console.error('Failed to write to anchors.json:', error);
+            return res.status(500).json({ error: 'Failed to write to anchors.json' });
+        }
+
+        res.json({ message: 'Anchor content saved successfully.', anchorData });
+    } catch (error) {
+        console.error('Error in Anchor Builder generation:', error);
+        res.status(500).json({ error: 'Error in Anchor Builder generation' });
+    }
+});
+
+app.post('/api/update-anchor', (req, res) => {
+    const { type, title, description, userName, taskId } = req.body;
+
+    if (!type || !title || !description || !userName || !taskId) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const anchorFilePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'anchors.json');
+
+    try {
+        // Read the existing anchor.json file
+        let anchorData = {};
+        if (fs.existsSync(anchorFilePath)) {
+            const fileContent = fs.readFileSync(anchorFilePath, 'utf-8');
+            anchorData = JSON.parse(fileContent);
+        }
+
+        // Update the relevant section (persona or situation)
+        anchorData[type] = { title, description };
+
+        // Write the updated data back to the file
+        fs.writeFileSync(anchorFilePath, JSON.stringify(anchorData, null, 2), 'utf-8');
+
+        res.json({ message: `${type} Anchor updated successfully.` });
+    } catch (error) {
+        console.error('Failed to update anchor.json:', error);
+        res.status(500).json({ error: 'Failed to update anchor.json' });
+    }
+});
+
+app.post('/api/regenerate-anchor', async (req, res) => {
+    const { userName, taskId, anchorType, userPrompt } = req.body;
+
+    if (!userName || !taskId || !anchorType || !userPrompt) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/anchor_editor.prompt.md');
+    const anchorFilePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'anchors.json');
+
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load anchor_editor.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    // Read the current anchor data
+    let anchorData = {};
+    try {
+        if (fs.existsSync(anchorFilePath)) {
+            const fileContent = fs.readFileSync(anchorFilePath, 'utf-8');
+            anchorData = JSON.parse(fileContent);
+        }
+    } catch (error) {
+        console.error('Failed to read anchors.json:', error);
+        return res.status(500).json({ error: 'Failed to read anchors.json' });
+    }
+
+    const currentAnchor = anchorData[anchorType] || { title: '', description: '' };
+
+    // Replace placeholders in the prompt
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', taskId) // Assuming taskId represents the user task
+        .replace('{{DRAFT_LATEST}}', '') // Replace with actual draft content if available
+        .replace('{{INTENT_CURRENT}}', '[]') // Replace with actual intent pairs if available
+        .replace('{{CURRENT_ANCHOR}}', JSON.stringify(currentAnchor, null, 2))
+        .replace('{{USER_PROMPT}}', userPrompt);
+
+    try {
+        const responseText = await sendRequestToGemini(prompt);
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        // Parse the AI response
+        const sanitizedContent = responseText.replace(/```json|```/g, ''); // Remove Markdown-style code block delimiters
+        let updatedAnchor;
+        try {
+            updatedAnchor = JSON.parse(sanitizedContent);
+        } catch (error) {
+            console.error('Failed to parse AI response as JSON:', error);
+            return res.status(500).json({ error: 'Failed to parse AI response as JSON' });
+        }
+
+        // Update the anchor data
+        anchorData[anchorType] = updatedAnchor;
+
+        // Write the updated data back to the file
+        try {
+            fs.writeFileSync(anchorFilePath, JSON.stringify(anchorData, null, 2), 'utf-8');
+        } catch (error) {
+            console.error('Failed to write to anchors.json:', error);
+            return res.status(500).json({ error: 'Failed to write to anchors.json' });
+        }
+
+        res.json({ message: `${anchorType} Anchor regenerated successfully.`, updatedAnchor });
+    } catch (error) {
+        console.error('Error in Anchor Regeneration:', error);
+        res.status(500).json({ error: 'Error in Anchor Regeneration' });
+    }
+});
+
+app.get('/api/anchors/:userName', (req, res) => {
+    const { userName } = req.params;
+    const userPath = path.join(__dirname, '../data/SessionData', userName);
+
+    if (!fs.existsSync(userPath)) {
+        return res.status(404).json({ error: `User directory not found for ${userName}` });
+    }
+
+    try {
+        const taskDirs = fs.readdirSync(userPath).filter((dir) => {
+            const taskPath = path.join(userPath, dir);
+            return fs.statSync(taskPath).isDirectory();
+        });
+
+        const aggregatedAnchors = { persona: {}, situation: {} };
+
+        taskDirs.forEach((taskId) => {
+            const anchorPath = path.join(userPath, taskId, 'anchors.json');
+            if (fs.existsSync(anchorPath)) {
+                try {
+                    const anchorData = JSON.parse(fs.readFileSync(anchorPath, 'utf-8'));
+                    if (anchorData.persona) {
+                        Object.keys(anchorData.persona).forEach((key) => {
+                            aggregatedAnchors.persona[key] = anchorData.persona[key];
+                        });
+                    }
+                    if (anchorData.situation) {
+                        Object.keys(anchorData.situation).forEach((key) => {
+                            aggregatedAnchors.situation[key] = anchorData.situation[key];
+                        });
+                    }
+                } catch (error) {
+                    console.error(`Error reading or parsing ${anchorPath}:`, error);
+                }
+            }
+        });
+
+        res.json(aggregatedAnchors);
+    } catch (error) {
+        console.error('Error aggregating anchors:', error);
+        res.status(500).json({ error: 'Failed to aggregate anchors.' });
     }
 });
 

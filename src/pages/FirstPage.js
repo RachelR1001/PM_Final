@@ -61,10 +61,21 @@ const FirstPage = () => {
                 const taskId = response.data.taskId;
                 console.log('Generated taskId:', taskId);
 
+                // Fetch anchors for the user
+                const anchorsResponse = await axios.get(`http://localhost:3001/api/anchors/${userName}`);
+                const anchors = anchorsResponse.data;
+
                 setIsAnalyzing(true);
                 setTimeout(() => {
                     setIsAnalyzing(false);
-                    navigate('/second', { state: { userTask: userInput, userName, taskId } }); // 传递从后端获取的 taskId
+                    navigate('/second', { 
+                        state: { 
+                            userTask: userInput, 
+                            userName, 
+                            taskId,
+                            anchors // Pass anchors to SecondPage
+                        } 
+                    }); // 传递从后端获取的 taskId
                 }, 5000); // 模拟分析时间为 5 秒
             } catch (error) {
                 console.error('创建 Session 数据时出错:', error);

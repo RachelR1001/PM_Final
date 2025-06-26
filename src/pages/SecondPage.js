@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Radio, Checkbox, Spin, message, Tag, Button, Typography } from 'antd';
+import { Row, Col, Card, Radio, Checkbox, Spin, message, Tag, Button, Typography, Input, Upload, Select, Tooltip } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { InboxOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
+const { Dragger } = Upload;
 
 const SecondPage = () => {
     const location = useLocation();
-    const { userTask, userName, taskId } = location.state || {};
+    const { userTask, userName, taskId, anchors } = location.state || {};
     console.log('userName:', userName); // 检查 userName 是否正确传递
     console.log('userTask:', userTask); // 检查 userTask 是否正确传递
     console.log('taskId:', taskId); // 检查 taskId 是否正确传递
+    console.log('anchors:', anchors); // 检查 anchors 是否正确传递
     const [factors, setFactors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedCards, setSelectedCards] = useState([]); // 存储多选的卡片
@@ -19,6 +22,11 @@ const SecondPage = () => {
     const [loadingSnippets, setLoadingSnippets] = useState({}); // 存储每个卡片的加载状态
     const [generatingEmail, setGeneratingEmail] = useState(false);
     const navigate = useNavigate();
+    const [personaAnchors, setPersonaAnchors] = useState({});
+    const [situationAnchors, setSituationAnchors] = useState({});
+    const [selectedPersona, setSelectedPersona] = useState(null);
+    const [selectedSituation, setSelectedSituation] = useState(null);
+    const [fileList, setFileList] = useState([]);
 
     useEffect(() => {
         console.log('userTask:', userTask); // 检查 userTask 是否有值
@@ -36,13 +44,34 @@ const SecondPage = () => {
             }
         };
 
+        const fetchAnchors = async () => {
+            try {
+                const response = await axios.get(`http://localhost:3001/api/anchors/${userName}`);
+                const anchors = response.data;
+
+                // Store the full objects for persona and situation anchors
+                setPersonaAnchors(anchors.persona || {});
+                setSituationAnchors(anchors.situation || {});
+            } catch (error) {
+                console.error('Error fetching anchors:', error);
+                message.error('Failed to fetch anchors. Please ensure the session data is initialized correctly.');
+            }
+        };
+
         if (userTask) {
             fetchRankedFactors();
         } else {
             message.error('userTask 未传递，请检查 FirstPage 的跳转逻辑');
             setLoading(false);
         }
-    }, [userTask]);
+
+        if (anchors) {
+            setPersonaAnchors(anchors.persona || {});
+            setSituationAnchors(anchors.situation || {});
+        } else if (taskId) {
+            fetchAnchors();
+        }
+    }, [userTask, taskId, userName, anchors]);
 
     const handleCardSelect = (factorId) => {
         setSelectedCards((prevSelectedCards) => {
@@ -92,6 +121,37 @@ const SecondPage = () => {
                 [factorId]: false,
             }));
         }
+    };
+
+    const handleCustomOptionChange = (factorId, value) => {
+        setSelectedOptions((prevSelectedOptions) => ({
+            ...prevSelectedOptions,
+            [factorId]: value,
+        }));
+    };
+
+    const handleAddCustomOption = (factorId, customOption) => {
+        if (!customOption) return;
+
+        setFactors((prevFactors) =>
+            prevFactors.map((factor) =>
+                factor.id === factorId
+                    ? {
+                          ...factor,
+                          options: [...factor.options, customOption],
+                      }
+                    : factor
+            )
+        );
+
+        // Automatically select the new custom option
+        setSelectedOptions((prevSelectedOptions) => ({
+            ...prevSelectedOptions,
+            [factorId]: customOption,
+        }));
+
+        // Trigger snippet generation for the custom option
+        handleOptionChange(factorId, customOption);
     };
 
     const getTagColor = (index) => {
@@ -160,6 +220,32 @@ const SecondPage = () => {
         }
     };
 
+    const handleGenerateContextualDraft = async () => {
+        if (!selectedPersona || !selectedSituation) {
+            message.error('Please select both Persona and Situation anchors.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('personaAnchor', selectedPersona);
+        formData.append('situationAnchor', selectedSituation);
+        fileList.forEach((file) => {
+            formData.append('files', file.originFileObj);
+        });
+
+        try {
+            const response = await axios.post('http://localhost:3001/generate-contextual-draft', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            const { draft } = response.data;
+            navigate('/final-email', { state: { draft } });
+        } catch (error) {
+            console.error('Error generating contextual draft:', error);
+            message.error('Failed to generate contextual draft.');
+        }
+    };
+
     // 检查是否满足激活按钮的条件
     const isButtonDisabled = () => {
         if (selectedCards.length < 3) return true; // 至少选择三个卡片
@@ -167,6 +253,14 @@ const SecondPage = () => {
             if (!selectedOptions[cardId]) return true; // 每个选中的卡片必须有选中的选项
         }
         return false;
+    };
+
+    // Render dropdown options with label as title and value as description
+    const renderDropdownOptions = (anchors) => {
+        return Object.entries(anchors).map(([title, description]) => ({
+            label: title,
+            value: description,
+        }));
     };
 
     return (
@@ -179,6 +273,46 @@ const SecondPage = () => {
                         <p style={{ wordBreak: 'break-word' }}>Name: {userName || 'No name provided'}</p>
                         <h3>Your Email Task:</h3>
                         <p style={{ wordBreak: 'break-word' }}>{userTask || 'No task provided'}</p>
+
+                        {/* 新增 Contextual First-Draft Composer 卡片 */}
+                        <Card title="Contextual First-Draft Composer" style={{ marginTop: '16px' }}>
+                            <p>
+                                You can compose an initial email draft by integrating your chosen Persona and Situation
+                                anchors, and relevant previous email samples rather than selecting the tones.
+                            </p>
+                            <div style={{ marginBottom: '16px' }}>
+                                <Select
+                                    placeholder="Select Persona Anchor"
+                                    style={{ width: '100%', marginBottom: '8px' }}
+                                    options={renderDropdownOptions(personaAnchors)}
+                                    onChange={(value, option) => setSelectedPersona(option.label)}
+                                />
+                                <Select
+                                    placeholder="Select Situation Anchor"
+                                    style={{ width: '100%' }}
+                                    options={renderDropdownOptions(situationAnchors)}
+                                    onChange={(value, option) => setSelectedSituation(option.label)}
+                                />
+                            </div>
+                            <Dragger
+                                fileList={fileList}
+                                onChange={({ fileList }) => setFileList(fileList)}
+                                beforeUpload={() => false} // Prevent automatic upload
+                                multiple
+                            >
+                                <p className="ant-upload-drag-icon">
+                                    <InboxOutlined />
+                                </p>
+                                <p className="ant-upload-text">Click or drag file to this area to upload</p>
+                            </Dragger>
+                            <Button
+                                type="primary"
+                                style={{ marginTop: '16px' }}
+                                onClick={handleGenerateContextualDraft}
+                            >
+                                Generate Contextual Draft
+                            </Button>
+                        </Card>
                     </Col>
 
                     {/* 右侧栅格 */}
@@ -203,7 +337,7 @@ const SecondPage = () => {
                                 onClick={handleGenerateEmail}
                             >
                                 Generate Email
-                                </Button>
+                            </Button>
                         </div>
 
                         {/* 下半部分卡片网格系统 */}
@@ -219,7 +353,7 @@ const SecondPage = () => {
                                 {factors.map((factor, index) => {
                                     const tagInfo = getTagColor(index);
                                     return (
-                                        <Col span={12} key={factor.id}> {/* 双行显示 */}
+                                        <Col span={12} key={factor.id}>
                                             <Card
                                                 bordered
                                                 style={{
@@ -236,13 +370,13 @@ const SecondPage = () => {
                                                             {factor.title}
                                                         </div>
                                                         <Tag color={tagInfo.color}>{tagInfo.text}</Tag>
-                            </div>
+                                                    </div>
                                                 }
                                             >
                                                 <Radio.Group
                                                     onChange={(e) => handleOptionChange(factor.id, e.target.value)}
                                                     value={selectedOptions[factor.id]}
-                                                    disabled={!selectedCards.includes(factor.id)} // 禁用未选中的卡片内的选项
+                                                    disabled={!selectedCards.includes(factor.id)}
                                                 >
                                                     {factor.options.map((option) => (
                                                         <Radio key={option} value={option}>
@@ -262,6 +396,15 @@ const SecondPage = () => {
                                                         </Text>
                                                     )
                                                 )}
+                                                {/* 自定义选项输入框 */}
+                                                <div style={{ marginTop: '16px' }}>
+                                                    <Input.Search
+                                                        placeholder="Add custom option"
+                                                        enterButton="Add"
+                                                        onSearch={(value) => handleAddCustomOption(factor.id, value)}
+                                                        disabled={!selectedCards.includes(factor.id)}
+                                                    />
+                                                </div>
                                             </Card>
                                         </Col>
                                     );
@@ -271,7 +414,7 @@ const SecondPage = () => {
                     </Col>
                 </Row>
             </div>
-            </Spin>
+        </Spin>
     );
 };
 

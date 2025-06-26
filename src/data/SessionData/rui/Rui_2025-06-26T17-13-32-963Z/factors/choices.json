@@ -1,0 +1,23 @@
+[
+  {
+    "id": "relationship_type",
+    "title": "Relationship type",
+    "options": [
+      "Supervisor and Student"
+    ]
+  },
+  {
+    "id": "occasion",
+    "title": "Occasion",
+    "options": [
+      "school issues"
+    ]
+  },
+  {
+    "id": "power_difference",
+    "title": "Power, resource, status, hierarchy difference",
+    "options": [
+      "Receiver is higher"
+    ]
+  }
+]

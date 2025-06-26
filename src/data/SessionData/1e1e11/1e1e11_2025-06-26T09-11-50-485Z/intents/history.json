@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-06-26T09:12:16.171Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Specific Purpose",
+      "value": "Concerns a particular academic or research-related topic"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T09:12:16.172Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Desired Action",
+      "value": "Aims to elicit a specific response or action from the professor"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T09:12:16.173Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Level of Detail",
+      "value": "Requires appropriate technical or academic depth relevant to the subject"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T09:12:16.173Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Reference to Past Interactions",
+      "value": "Likely needs to build upon previous discussions or progress updates"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-06-26T09:12:16.173Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Implicit Urgency",
+      "value": "The topic may imply a certain timeframe for response or action"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]
