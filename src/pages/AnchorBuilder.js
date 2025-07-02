@@ -132,7 +132,7 @@ const AnchorBuilder = () => {
     };
 
     return (
-        <div style={{ padding: '20px' }}>
+        <div className='anchor-builder-container' style={{ padding: '20px' ,width: '100% !important'}}>
             <Row gutter={[16, 16]}>
                 <Col span={24}>
                     <Card bordered style={{ width: '100%' }} title="Persona Anchor">
@@ -205,9 +205,9 @@ const AnchorBuilder = () => {
                     </Card>
                 </Col>
             </Row>
-            <Row gutter={[16, 16]} style={{ marginTop: '20px' }}>
+            <Row gutter={[16, 16]} style={{ marginTop: '20px' ,width: '100% !important'}}>
                 <Col span={24}>
-                    <Card bordered style={{ width: '100%' }} title="Anchor Editor">
+                    <Card bordered style={{ width: '100% !important' }} title="Anchor Editor">
                         <div>
                             <Radio.Group
                                 value={selectedAnchorType}

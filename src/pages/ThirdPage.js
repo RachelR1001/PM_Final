@@ -261,6 +261,7 @@ const ThirdPage = () => {
     const [directRewriterLoading, setDirectRewriterLoading] = useState(false);
     const [selectiveAspectLoading, setSelectiveAspectLoading] = useState(false);
     const [editorKey, setEditorKey] = useState(0); // 添加一个状态变量
+    const [isLoadingSaveAndGenerate, setIsLoadingSaveAndGenerate] = useState(false);
 
     // Function to handle right-click
     const handleContextMenu = (event) => {
@@ -391,20 +392,37 @@ const ThirdPage = () => {
             return;
         }
 
-        setIsLoadingVariations(true);
+        // Replace the selected text in the editor with the chosen variation
+        const { selection } = editor;
+        if (selection && selectedText) {
+            try {
+                if (Editor.string(editor, selection) === selectedText) {
+                    Transforms.delete(editor, { at: selection });
+                    Transforms.insertText(editor, selectedOption, { at: selection.anchor });
+                } else {
+                    Transforms.insertText(editor, selectedOption);
+                }
+            } catch (transformError) {
+                console.warn('Error replacing text in editor:', transformError);
+                Transforms.insertText(editor, selectedOption); // Fallback
+            }
+        }
 
+        message.success('Text replaced in the editor.');
+
+        // Close the modal immediately
+        handleModalClose();
+
+        // Run the variation-intent-analyzer API call in the background
         try {
-            // Fetch real data for factor choices and current intents
             const factorChoices = await getFactorChoices();
             const intentCurrent = await getIntentCurrent();
 
-            // Get the current editor content
             const draftLatest = value
                 .map((node) => getNodeText(editor, node))
                 .filter((text) => text.trim())
                 .join('\n\n');
 
-            // Prepare the data for the request
             const requestData = {
                 draftLatest,
                 factorChoices,
@@ -418,37 +436,23 @@ const ThirdPage = () => {
 
             console.log('Sending request to /variation-intent-analyzer with data:', requestData);
 
-            // Send the request to the server
-            const response = await axios.post('http://localhost:3001/variation-intent-analyzer', requestData);
-
-            if (response.data && response.data.updatedIntents) {
-                message.success('Intents updated successfully.');
-                console.log('Updated intents:', response.data.updatedIntents);
-
-                // Replace the selected text with the new variation in the editor
-                const { selection } = editor;
-                if (selection && selectedText) {
-                    try {
-                        if (Editor.string(editor, selection) === selectedText) {
-                            Transforms.delete(editor, { at: selection });
-                            Transforms.insertText(editor, selectedOption, { at: selection.anchor });
-                        } else {
-                            Transforms.insertText(editor, selectedOption);
-                        }
-                    } catch (transformError) {
-                        console.warn('Error replacing text in editor:', transformError);
-                        Transforms.insertText(editor, selectedOption); // Fallback
+            // Asynchronous API call
+            axios.post('http://localhost:3001/variation-intent-analyzer', requestData)
+                .then((response) => {
+                    if (response.data && response.data.updatedIntents) {
+                        setIntents(response.data.updatedIntents); // Update intents in the state
+                        message.success('Intents updated successfully in the background.');
+                    } else {
+                        message.error('Failed to update intents in the background.');
                     }
-                }
-            } else {
-                message.error('Failed to update intents. Please try again.');
-            }
+                })
+                .catch((error) => {
+                    console.error('Error during background variation-intent-analyzer call:', error);
+                    message.error('An error occurred while updating intents in the background.');
+                });
         } catch (error) {
-            console.error('Error during handleModalConfirm:', error);
-            message.error('An error occurred. Please try again.');
-        } finally {
-            setIsLoadingVariations(false);
-            handleModalClose();
+            console.error('Error preparing data for variation-intent-analyzer:', error);
+            message.error('Failed to prepare data for background intent analysis.');
         }
     };
 
@@ -723,12 +727,14 @@ const ThirdPage = () => {
 
     // Function to save and navigate to Anchor Builder
     const handleSaveAndGenerateTemplate = async () => {
-        const draftLatest = value
-            .map((node) => getNodeText(editor, node))
-            .filter((text) => text.trim())
-            .join('\n\n');
+        setIsLoadingSaveAndGenerate(true);
 
         try {
+            const draftLatest = value
+                .map((node) => getNodeText(editor, node))
+                .filter((text) => text.trim())
+                .join('\n\n');
+
             // Save the draft
             await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
                 content: draftLatest,
@@ -758,6 +764,8 @@ const ThirdPage = () => {
         } catch (error) {
             console.error('Error saving draft and generating anchor content:', error);
             message.error('Failed to save draft or generate anchor content. Please try again.');
+        } finally {
+            setIsLoadingSaveAndGenerate(false);
         }
     };
 
@@ -780,6 +788,30 @@ const ThirdPage = () => {
             return;
         }
 
+        // 立即更新富文本编辑器内容
+        const { selection } = editor;
+        if (selection && selectedText) {
+            try {
+                const selectedRangeText = Editor.string(editor, selection);
+                if (selectedRangeText === selectedText) {
+                    Transforms.delete(editor, { at: selection });
+                    Transforms.insertText(editor, rewrittenVersion, { at: selection.anchor });
+                } else {
+                    console.warn('Selected text does not match. Inserting at cursor position.');
+                    Transforms.insertText(editor, rewrittenVersion);
+                }
+            } catch (transformError) {
+                console.warn('Error replacing text in editor:', transformError);
+                Transforms.insertText(editor, rewrittenVersion); // Fallback
+            }
+        } else {
+            console.warn('No selection found. Inserting at cursor position.');
+            Transforms.insertText(editor, rewrittenVersion);
+        }
+
+        message.success('Text replaced in the editor.');
+
+        // 后台运行 rewrite-intent
         try {
             const requestData = {
                 draftLatest: rewrittenVersion,
@@ -791,44 +823,76 @@ const ThirdPage = () => {
                 taskId,
             };
 
-            const response = await axios.post('http://localhost:3001/rewrite-intent', requestData);
-
-            if (response.data && response.data.updatedIntents) {
-                // 更新 current.json 和 history.json
-                setIntents(response.data.updatedIntents);
-
-                // 更新 latest.md 文件
-                const draftLatest = value
-                    .map((node) => getNodeText(editor, node))
-                    .filter((text) => text.trim())
-                    .join('\n\n');
-
-                await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
-                    content: draftLatest,
+            // 异步调用 API
+            axios.post('http://localhost:3001/rewrite-intent', requestData)
+                .then((response) => {
+                    if (response.data && response.data.updatedIntents) {
+                        setIntents(response.data.updatedIntents); // 更新 intents
+                        message.success('Intents updated successfully in the background.');
+                    } else {
+                        message.error('Failed to update intents in the background.');
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error in background rewrite-intent:', error);
+                    message.error('Failed to update intents in the background.');
                 });
 
-                // 更新富文本编辑器内容
-                const { selection } = editor;
-                if (selection && selectedText) {
-                    if (Editor.string(editor, selection) === selectedText) {
-                        Transforms.delete(editor, { at: selection });
-                        Transforms.insertText(editor, rewrittenVersion, { at: selection.anchor });
-                    } else {
-                        Transforms.insertText(editor, rewrittenVersion);
-                    }
-                }
+            // 异步保存 latest.md
+            const draftLatest = value
+                .map((node) => getNodeText(editor, node))
+                .filter((text) => text.trim())
+                .join('\n\n');
 
-                message.success('Intents, latest draft, and editor content updated successfully.');
-            } else {
-                message.error('Failed to update intents. Please try again.');
-            }
+            axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
+                content: draftLatest,
+            }).then(() => {
+                message.success('Draft saved successfully in the background.');
+            }).catch((error) => {
+                console.error('Error saving draft in the background:', error);
+                message.error('Failed to save draft in the background.');
+            });
         } catch (error) {
             console.error('Error in handleDirectWriterConfirm:', error);
-            message.error('Failed to update content. Please try again.');
+            message.error('Failed to process rewrite-intent in the background.');
         }
     };
 
     const handleSelectiveAspectConfirm = async () => {
+        console.log('handleSelectiveAspectConfirm triggered'); // Debug log
+
+        if (!rewrittenVersion.trim()) {
+            message.error('No rewritten version available to confirm.');
+            return;
+        }
+
+        // Replace the selected text in the editor with the rewritten version
+        const { selection } = editor;
+        if (selection && selectedText) {
+            try {
+                const selectedRangeText = Editor.string(editor, selection);
+                if (selectedRangeText === selectedText) {
+                    Transforms.delete(editor, { at: selection });
+                    Transforms.insertText(editor, rewrittenVersion, { at: selection.anchor });
+                } else {
+                    console.warn('Selected text does not match. Inserting at cursor position.');
+                    Transforms.insertText(editor, rewrittenVersion);
+                }
+            } catch (transformError) {
+                console.warn('Error replacing text in editor:', transformError);
+                Transforms.insertText(editor, rewrittenVersion); // Fallback
+            }
+        } else {
+            console.warn('No selection found. Inserting at cursor position.');
+            Transforms.insertText(editor, rewrittenVersion);
+        }
+
+        message.success('Text replaced in the editor.');
+
+        // Close the modal immediately
+        setIsSelectiveAspectRewriterModalVisible(false);
+
+        // Run the aspect-intent-analyzer API call in the background
         try {
             const draftLatest = value
                 .map((node) => getNodeText(editor, node))
@@ -845,40 +909,30 @@ const ThirdPage = () => {
                     lock: aspectsKeep,
                     revise: aspectsChange,
                 },
-                manualInstruction: manualInstruction.trim() || '', // 允许为空
+                manualInstruction: manualInstruction.trim() || '', // Optional
                 userName: userName || 'unknown',
                 taskId: taskId || 'unknown',
             };
 
-            const response = await axios.post('http://localhost:3001/aspect-intent-analyzer', requestData);
+            console.log('Sending request to /aspect-intent-analyzer with data:', requestData);
 
-            if (response.data && response.data.updatedIntents) {
-                // 更新 current.json 和 history.json
-                setIntents(response.data.updatedIntents);
-
-                // 更新 latest.md 文件
-                await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, {
-                    content: draftLatest,
-                });
-
-                // 更新富文本编辑器内容
-                const { selection } = editor;
-                if (selection && selectedText) {
-                    if (Editor.string(editor, selection) === selectedText) {
-                        Transforms.delete(editor, { at: selection });
-                        Transforms.insertText(editor, rewrittenVersion, { at: selection.anchor });
+            // Asynchronous API call
+            axios.post('http://localhost:3001/aspect-intent-analyzer', requestData)
+                .then((response) => {
+                    if (response.data && response.data.updatedIntents) {
+                        setIntents(response.data.updatedIntents); // Update intents in the state
+                        message.success('Intents updated successfully in the background.');
                     } else {
-                        Transforms.insertText(editor, rewrittenVersion);
+                        message.error('Failed to update intents in the background.');
                     }
-                }
-
-                message.success('Intents, latest draft, and editor content updated successfully.');
-            } else {
-                message.error('Failed to update intents. Please try again.');
-            }
+                })
+                .catch((error) => {
+                    console.error('Error during background aspect-intent-analyzer call:', error);
+                    message.error('An error occurred while updating intents in the background.');
+                });
         } catch (error) {
-            console.error('Error in handleSelectiveAspectConfirm:', error);
-            message.error('Failed to update content. Please try again.');
+            console.error('Error preparing data for aspect-intent-analyzer:', error);
+            message.error('Failed to prepare data for background intent analysis.');
         }
     };
 
@@ -1100,19 +1154,20 @@ const ThirdPage = () => {
                                     >
                                         Save
                                     </button>
-                                    <button
+                                    <Button
+                                        type="primary"
                                         onClick={handleSaveAndGenerateTemplate}
+                                        loading={isLoadingSaveAndGenerate}
                                         style={{
                                             padding: '4px 8px',
                                             background: '#52c41a',
                                             color: '#fff',
                                             border: 'none',
                                             borderRadius: '4px',
-                                            cursor: 'pointer',
                                         }}
                                     >
-                                        Save and Generate Template
-                                    </button>
+                                        Save and Generate Anchors
+                                    </Button>
                                 </div>
                             </div>
                         }

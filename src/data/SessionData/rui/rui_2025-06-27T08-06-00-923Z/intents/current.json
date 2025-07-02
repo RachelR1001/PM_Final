@@ -5,7 +5,7 @@
   },
   {
     "dimension": "Expected Tone",
-    "value": "Professional but direct"
+    "value": "Professional and direct"
   },
   {
     "dimension": "Assumed Context Level",
@@ -18,5 +18,25 @@
   {
     "dimension": "Communication Frequency",
     "value": "Part of ongoing communication/updates"
+  },
+  {
+    "dimension": "custom",
+    "value": "Following up on our last discussion regarding [mention specific topic discussed], I'm writing to"
+  },
+  {
+    "dimension": "custom",
+    "value": "I've implemented the changes we discussed regarding [mention the specific changes - e.g., the statistical approach, the framing of the research question] and have updated the relevant section accordingly for your review."
+  },
+  {
+    "dimension": "custom",
+    "value": "Please let me know if you have any thoughts on the draft"
+  },
+  {
+    "dimension": "custom",
+    "value": "Please find attached the current draft of [mention the document attached"
+  },
+  {
+    "dimension": "custom",
+    "value": "For the coming week, I plan to [mention your next steps"
   }
 ]
