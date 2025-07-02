@@ -27,6 +27,8 @@ const SecondPage = () => {
     const [selectedPersona, setSelectedPersona] = useState(null);
     const [selectedSituation, setSelectedSituation] = useState(null);
     const [fileList, setFileList] = useState([]);
+    const [personaOptions, setPersonaOptions] = useState([]);
+    const [situationOptions, setSituationOptions] = useState([]);
 
     useEffect(() => {
         console.log('userTask:', userTask); // 检查 userTask 是否有值
@@ -72,6 +74,44 @@ const SecondPage = () => {
             fetchAnchors();
         }
     }, [userTask, taskId, userName, anchors]);
+
+    useEffect(() => {
+        // Fetch anchors data from the API
+        const fetchAnchorsData = async () => {
+            try {
+                const response = await axios.get(`http://localhost:3001/api/anchors/${userName}`);
+                console.log('API Response:', response.data); // Debugging: Log the API response
+
+                const { persona, situation } = response.data;
+
+                // Map persona and situation data to Select options
+                const personaMapped = [
+                    {
+                        label: persona.title, // Ensure title is mapped to label
+                        value: persona.description, // Ensure description is mapped to value
+                    },
+                ];
+
+                const situationMapped = [
+                    {
+                        label: situation.title, // Ensure title is mapped to label
+                        value: situation.description, // Ensure description is mapped to value
+                    },
+                ];
+
+                console.log('Mapped Persona Options:', personaMapped); // Debugging: Log mapped persona options
+                console.log('Mapped Situation Options:', situationMapped); // Debugging: Log mapped situation options
+
+                setPersonaOptions(personaMapped);
+                setSituationOptions(situationMapped);
+            } catch (error) {
+                console.error('Error fetching anchors data:', error);
+                message.error('Failed to fetch anchors data.');
+            }
+        };
+
+        fetchAnchorsData();
+    }, [userName]);
 
     const handleCardSelect = (factorId) => {
         setSelectedCards((prevSelectedCards) => {
@@ -221,17 +261,29 @@ const SecondPage = () => {
     };
 
     const handleGenerateContextualDraft = async () => {
-        if (!selectedPersona || !selectedSituation) {
-            message.error('Please select both Persona and Situation anchors.');
+        if (!selectedPersona && !selectedSituation) {
+            message.error('Please select at least one anchor (Persona or Situation).');
             return;
         }
 
         const formData = new FormData();
-        formData.append('personaAnchor', selectedPersona);
-        formData.append('situationAnchor', selectedSituation);
-        fileList.forEach((file) => {
-            formData.append('files', file.originFileObj);
-        });
+        formData.append('personaAnchor', JSON.stringify(personaAnchors[selectedPersona] || {}));
+        formData.append('situationAnchor', JSON.stringify(situationAnchors[selectedSituation] || {}));
+        if (fileList.length > 0) {
+            const file = fileList[0];
+            const fileContent = await file.originFileObj.text();
+            formData.append('writingSample', fileContent);
+        } else {
+            formData.append('writingSample', '');
+        }
+
+        // 确保 taskId 和 userName 被正确传递
+        if (!taskId || !userName) {
+            message.error('Task ID or User Name is missing.');
+            return;
+        }
+        formData.append('taskId', taskId);
+        formData.append('userName', userName);
 
         try {
             const response = await axios.post('http://localhost:3001/generate-contextual-draft', formData, {
@@ -239,6 +291,11 @@ const SecondPage = () => {
             });
 
             const { draft } = response.data;
+
+            // Save the draft to the backend
+            await axios.post(`http://localhost:3001/sessiondata/${taskId}/drafts/latest.md`, { content: draft });
+
+            // Navigate to Final Email page with the draft content
             navigate('/final-email', { state: { draft } });
         } catch (error) {
             console.error('Error generating contextual draft:', error);
@@ -253,14 +310,6 @@ const SecondPage = () => {
             if (!selectedOptions[cardId]) return true; // 每个选中的卡片必须有选中的选项
         }
         return false;
-    };
-
-    // Render dropdown options with label as title and value as description
-    const renderDropdownOptions = (anchors) => {
-        return Object.entries(anchors).map(([title, description]) => ({
-            label: title,
-            value: description,
-        }));
     };
 
     return (
@@ -284,21 +333,24 @@ const SecondPage = () => {
                                 <Select
                                     placeholder="Select Persona Anchor"
                                     style={{ width: '100%', marginBottom: '8px' }}
-                                    options={renderDropdownOptions(personaAnchors)}
-                                    onChange={(value, option) => setSelectedPersona(option.label)}
+                                    options={personaOptions}
+                                    onChange={(value) => setSelectedPersona(value)}
+                                    optionLabelProp="label"
                                 />
                                 <Select
                                     placeholder="Select Situation Anchor"
                                     style={{ width: '100%' }}
-                                    options={renderDropdownOptions(situationAnchors)}
-                                    onChange={(value, option) => setSelectedSituation(option.label)}
+                                    options={situationOptions}
+                                    onChange={(value) => setSelectedSituation(value)}
+                                    optionLabelProp="label"
                                 />
                             </div>
                             <Dragger
                                 fileList={fileList}
                                 onChange={({ fileList }) => setFileList(fileList)}
                                 beforeUpload={() => false} // Prevent automatic upload
-                                multiple
+                                multiple={false}
+                                accept=".md" // Restrict file format to .md
                             >
                                 <p className="ant-upload-drag-icon">
                                     <InboxOutlined />
@@ -309,6 +361,7 @@ const SecondPage = () => {
                                 type="primary"
                                 style={{ marginTop: '16px' }}
                                 onClick={handleGenerateContextualDraft}
+                                disabled={!selectedPersona && !selectedSituation} // Disable button if no anchor is selected
                             >
                                 Generate Contextual Draft
                             </Button>

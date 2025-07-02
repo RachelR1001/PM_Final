@@ -309,6 +309,13 @@ const ThirdPage = () => {
             const factorChoices = await getFactorChoices();
             const intentCurrent = await getIntentCurrent();
 
+            console.log('Request Data for Variation Maker:', {
+                draftLatest,
+                factorChoices,
+                intentCurrent,
+                selectedContent: selectedText,
+            });
+
             try {
                 const response = await axios.post('http://localhost:3001/variation-maker', {
                     draftLatest,

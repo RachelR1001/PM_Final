@@ -6,6 +6,9 @@ You are an expert email writer. Use the context provided to generate an appropri
 **Situation anchor:**  
 {{SITUATION_ANCHOR}}
 
+**Writing Sample:**  
+{{WRITING_SAMPLE}}
+
 **User writing goal:**  
 {{USER_TASK}}
 

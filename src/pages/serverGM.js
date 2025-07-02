@@ -511,7 +511,11 @@ app.get('/sessiondata/:taskId/*', (req, res) => {
 app.post('/variation-maker', async (req, res) => {
     const { draftLatest, factorChoices, intentCurrent, selectedContent } = req.body;
 
+    // 检查请求体内容
+    console.log('Request Body:', req.body);
+
     if (!draftLatest || !factorChoices || !intentCurrent || !selectedContent) {
+        console.error('Missing required fields:', { draftLatest, factorChoices, intentCurrent, selectedContent });
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
@@ -519,16 +523,20 @@ app.post('/variation-maker', async (req, res) => {
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+        console.log('Loaded Prompt Template:', promptTemplate); // 检查模板内容
     } catch (error) {
         console.error('Failed to load variation_maker_prompt.md:', error);
         return res.status(500).json({ error: 'Failed to load prompt template' });
     }
 
+    // 替换占位符
     const prompt = promptTemplate
-        .replace('{{Draft_LATEST}}', draftLatest)
-        .replace('{{factor_choices}}', JSON.stringify(factorChoices, null, 2))
-        .replace('{{intent_current}}', JSON.stringify(intentCurrent, null, 2))
-        .replace('{{selected_content}}', selectedContent);
+        .replace('{{Draft_LATEST}}', draftLatest || '')
+        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2) || '[]')
+        .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2) || '[]')
+        .replace('{{SELECTED_CONTENT}}', selectedContent || '');
+
+    console.log('Generated Prompt for Variation Maker:', prompt); // 检查替换后的内容
 
     try {
         const responseText = await sendRequestToGemini(prompt);
@@ -540,21 +548,7 @@ app.post('/variation-maker', async (req, res) => {
         const variations = responseText
             .split('\n')
             .filter((line) => line.trim() !== '') // Remove empty lines
-            .map((line) => {
-                // Remove markdown artifacts and trim whitespace
-                let cleanedLine = line.replace(/^[\s"']+|[\s"']+$/g, '').replace(/和$/, '');
-                
-                // Extract content up to the first sentence-ending punctuation
-                // Look for ., ?, ! followed by space, quote, or end of string
-                const match = cleanedLine.match(/^(.*?[.?!])(?:\s|["']|$)/);
-                if (match) {
-                    return match[1]; // Return the sentence without trailing punctuation context
-                }
-                
-                // If no sentence-ending punctuation found, return the cleaned line
-                return cleanedLine;
-            })
-            .filter((line) => line.trim() !== ''); // Remove any empty results
+            .map((line) => line.replace(/^[\s"']+|[\s"']+$/g, '').replace(/和$/, ''));
 
         res.json({ variations });
     } catch (error) {
@@ -817,7 +811,10 @@ app.post('/rewrite-intent', async (req, res) => {
                 currentIntents = JSON.parse(fs.readFileSync(intentsPath, 'utf-8'));
             } catch (error) {
                 console.error('Error reading current intents:', error);
+                currentIntents = intentCurrent; // Use the provided intents as a fallback
             }
+        } else {
+            currentIntents = intentCurrent; // Use the provided intents as a fallback
         }
 
         // Apply the AI's edit instructions and save history
@@ -1338,6 +1335,65 @@ app.get('/api/anchors/:userName', (req, res) => {
     } catch (error) {
         console.error('Error aggregating anchors:', error);
         res.status(500).json({ error: 'Failed to aggregate anchors.' });
+    }
+});
+
+app.post('/generate-contextual-draft', async (req, res) => {
+    const { personaAnchor, situationAnchor, writingSample, taskId, userName } = req.body;
+
+    // 检查必要字段是否存在
+    if (!taskId || !userName) {
+        return res.status(400).json({ error: 'Missing required fields: taskId or userName' });
+    }
+
+    const promptPath = path.join(__dirname, '../data/Prompts/contextual_first_draft_composer.prompt.md');
+    let promptTemplate;
+
+    try {
+        // 读取 prompt 模板文件
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load contextual_first_draft_composer.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    // 替换占位符
+    const prompt = promptTemplate
+        .replace('{{PERSONA_ANCHOR}}', personaAnchor || '')
+        .replace('{{SITUATION_ANCHOR}}', situationAnchor || '')
+        .replace('{{WRITING_SAMPLE}}', writingSample || '')
+        .replace('{{USER_TASK}}', ''); // 如果有 userTask，可以替换此处
+
+    try {
+        // 调用 Gemini 服务生成草稿
+        const draftContent = await sendRequestToGemini(prompt);
+
+        if (!draftContent) {
+            throw new Error('AI response is empty');
+        }
+
+        // 保存草稿到对应的 taskId
+        const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts');
+        const latestDraftPath = path.join(draftsPath, 'latest.md');
+
+        // 确保 drafts 目录存在
+        if (!fs.existsSync(draftsPath)) {
+            fs.mkdirSync(draftsPath, { recursive: true });
+        }
+
+        // 保存到 latest.md
+        fs.writeFileSync(latestDraftPath, draftContent.trim(), 'utf-8');
+
+        // 保存到新的草稿文件（例如 01_draft.md, 02_draft.md 等）
+        const draftFiles = fs.readdirSync(draftsPath).filter((file) => file.match(/^\d+_draft\.md$/));
+        const nextDraftNumber = draftFiles.length + 1;
+        const nextDraftPath = path.join(draftsPath, `${String(nextDraftNumber).padStart(2, '0')}_draft.md`);
+        fs.writeFileSync(nextDraftPath, draftContent.trim(), 'utf-8');
+
+        res.status(200).json({ draft: draftContent.trim() });
+    } catch (error) {
+        console.error('Error generating contextual draft:', error);
+        res.status(500).json({ error: 'Failed to generate contextual draft.' });
     }
 });
 

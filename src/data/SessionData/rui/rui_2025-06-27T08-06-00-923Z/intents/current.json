@@ -1,0 +1,22 @@
+[
+  {
+    "dimension": "Purpose of Email",
+    "value": "Academic/Research related communication"
+  },
+  {
+    "dimension": "Expected Tone",
+    "value": "Professional but direct"
+  },
+  {
+    "dimension": "Assumed Context Level",
+    "value": "Assumes shared context/prior knowledge"
+  },
+  {
+    "dimension": "Action Required",
+    "value": "Requires feedback or action on academic work"
+  },
+  {
+    "dimension": "Communication Frequency",
+    "value": "Part of ongoing communication/updates"
+  }
+]
