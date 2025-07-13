@@ -1,0 +1,124 @@
+[
+  {
+    "ts": "2025-07-13T11:36:18.945Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Implicit Purpose Category",
+      "value": "Professional update or request related to ongoing academic work"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:36:18.945Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Level of Specificity Required",
+      "value": "Sufficient detail for the supervisor to understand the context and request/update"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:36:18.946Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Action Requested from Professor",
+      "value": "Likely requires a specific action or response (e.g., feedback, approval, scheduling, information)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:36:18.946Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Contextual Reference",
+      "value": "May require referencing previous discussions, meetings, or project statuses"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:36:18.946Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Inferred Urgency/Timeline",
+      "value": "Likely tied to project milestones, deadlines, or next steps"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:39:30.107Z",
+    "action": "add",
+    "prev": null,
+    "next": {
+      "dimension": "Tone/Formality",
+      "value": "Slightly more conversational professional"
+    },
+    "source": "AI › VariationIntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:40:50.220Z",
+    "action": "change",
+    "prev": {
+      "dimension": "Level of Specificity Required",
+      "value": "Sufficient detail for the supervisor to understand the context and request/update"
+    },
+    "next": {
+      "dimension": "Level of Specificity Required",
+      "value": "Provides some insight into the student's process and desired outcome of the discussion"
+    },
+    "source": "AI › VariationIntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:40:50.221Z",
+    "action": "change",
+    "prev": {
+      "dimension": "Action Requested from Professor",
+      "value": "Likely requires a specific action or response (e.g., feedback, approval, scheduling, information)"
+    },
+    "next": {
+      "dimension": "Action Requested from Professor",
+      "value": "Specifically requests a discussion about the student's initial ideas regarding interpretation"
+    },
+    "source": "AI › VariationIntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:41:55.411Z",
+    "action": "change",
+    "prev": {
+      "dimension": "Level of Specificity Required",
+      "value": "Provides some insight into the student's process and desired outcome of the discussion"
+    },
+    "next": {
+      "dimension": "Level of Specificity Required",
+      "value": "Clearly articulates the desired outcome of the discussion: solidifying understanding and identifying next steps"
+    },
+    "source": "AI › VariationIntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:41:55.412Z",
+    "action": "change",
+    "prev": {
+      "dimension": "Action Requested from Professor",
+      "value": "Specifically requests a discussion about the student's initial ideas regarding interpretation"
+    },
+    "next": {
+      "dimension": "Action Requested from Professor",
+      "value": "Requests a discussion with the explicit goal of solidifying student understanding and identifying future steps"
+    },
+    "source": "AI › VariationIntentAnalyzer v1",
+    "actor": "AI"
+  }
+]
