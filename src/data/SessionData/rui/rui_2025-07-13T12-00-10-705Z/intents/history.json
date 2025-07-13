@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-07-13T12:01:21.408Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Core Email Topic",
+      "value": "Academic progress update addressing a specific issue or delay"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T12:01:21.409Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Reason for Apology",
+      "value": "Likely related to a missed deadline, delay, mistake, or underperformance on a task"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T12:01:21.409Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Purpose of Expressing Gratitude",
+      "value": "Thanking the supervisor for past help, guidance, understanding, or opportunity despite the issue"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T12:01:21.410Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Source of Excitement",
+      "value": "Enthusiasm for recent progress, future plans, or continuing the work despite the setback"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T12:01:21.410Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Underlying Communication Goal",
+      "value": "Mitigate a negative situation while reaffirming commitment and appreciation"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

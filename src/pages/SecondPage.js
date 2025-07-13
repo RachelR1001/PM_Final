@@ -123,50 +123,51 @@ const SecondPage = () => {
         });
     };
 
-    const handleOptionChange = async (factorId, option) => {
+    const handleOptionChange = async (factorId, selectedValues) => {
         setSelectedOptions((prevSelectedOptions) => ({
             ...prevSelectedOptions,
-            [factorId]: option,
+            [factorId]: selectedValues, // Store selected values as an array
         }));
 
-        // 设置当前卡片的加载状态为 true
+        // 初始化 snippets 和 loading 状态
+        setSnippets((prevSnippets) => ({
+            ...prevSnippets,
+            [factorId]: {}, // 每次重新选择时清空该 factor 的 snippets
+        }));
         setLoadingSnippets((prevLoadingSnippets) => ({
             ...prevLoadingSnippets,
             [factorId]: true,
         }));
 
-        // 发送请求获取 snippet
-        try {
-            const response = await axios.post('http://localhost:3001/generate-snippet', {
-                userTask,
-                factorName: factors.find((factor) => factor.id === factorId)?.title || '',
-                factorOption: option,
-            });
+        // 遍历选中的每个选项，逐个调用 generate-snippet 接口
+        const newSnippets = {};
+        for (const option of selectedValues) {
+            try {
+                const response = await axios.post('http://localhost:3001/generate-snippet', {
+                    userTask,
+                    factorName: factors.find((factor) => factor.id === factorId)?.title || '',
+                    factorOption: option,
+                });
 
-            if (response.data && response.data.snippet) {
-                setSnippets((prevSnippets) => ({
-                    ...prevSnippets,
-                    [factorId]: response.data.snippet,
-                }));
-            } else {
-                message.error('未能生成 snippet，请稍后重试');
+                if (response.data && response.data.snippet) {
+                    newSnippets[option] = response.data.snippet; // 将 snippet 存储到对应选项
+                } else {
+                    message.error(`未能生成 snippet for option: ${option}`);
+                }
+            } catch (error) {
+                console.error(`生成 snippet 出错 for option: ${option}`, error);
+                message.error(`生成 snippet 出错 for option: ${option}`);
             }
-        } catch (error) {
-            console.error('生成 snippet 出错:', error);
-            message.error('生成 snippet 出错，请稍后重试');
-        } finally {
-            // 设置当前卡片的加载状态为 false
-            setLoadingSnippets((prevLoadingSnippets) => ({
-                ...prevLoadingSnippets,
-                [factorId]: false,
-            }));
         }
-    };
 
-    const handleCustomOptionChange = (factorId, value) => {
-        setSelectedOptions((prevSelectedOptions) => ({
-            ...prevSelectedOptions,
-            [factorId]: value,
+        // 更新 snippets 和 loading 状态
+        setSnippets((prevSnippets) => ({
+            ...prevSnippets,
+            [factorId]: newSnippets,
+        }));
+        setLoadingSnippets((prevLoadingSnippets) => ({
+            ...prevLoadingSnippets,
+            [factorId]: false,
         }));
     };
 
@@ -187,11 +188,8 @@ const SecondPage = () => {
         // Automatically select the new custom option
         setSelectedOptions((prevSelectedOptions) => ({
             ...prevSelectedOptions,
-            [factorId]: customOption,
+            [factorId]: [...(prevSelectedOptions[factorId] || []), customOption],
         }));
-
-        // Trigger snippet generation for the custom option
-        handleOptionChange(factorId, customOption);
     };
 
     const getTagColor = (index) => {
@@ -208,7 +206,7 @@ const SecondPage = () => {
             const factorChoices = selectedCards.map((factorId) => ({
                 id: factorId,
                 title: factors.find((factor) => factor.id === factorId)?.title || '',
-                options: [selectedOptions[factorId]],
+                options: selectedOptions[factorId] || [], // Use array of selected options
             }));
 
             await axios.post('http://localhost:3001/save-factor-choices', {
@@ -426,28 +424,25 @@ const SecondPage = () => {
                                                     </div>
                                                 }
                                             >
-                                                <Radio.Group
-                                                    onChange={(e) => handleOptionChange(factor.id, e.target.value)}
-                                                    value={selectedOptions[factor.id]}
+                                                <Checkbox.Group
+                                                    options={factor.options.map((option) => ({ label: option, value: option }))}
+                                                    value={selectedOptions[factor.id] || []}
+                                                    onChange={(selectedValues) => handleOptionChange(factor.id, selectedValues)}
                                                     disabled={!selectedCards.includes(factor.id)}
-                                                >
-                                                    {factor.options.map((option) => (
-                                                        <Radio key={option} value={option}>
-                                                            {option}
-                                                        </Radio>
-                                                    ))}
-                                                </Radio.Group>
+                                                />
                                                 {loadingSnippets[factor.id] ? (
                                                     <Spin
                                                         tip="loading the snippet"
                                                         style={{ display: 'block', marginTop: '8px' }}
                                                     />
                                                 ) : (
-                                                    snippets[factor.id] && (
-                                                        <Text type="secondary" style={{ display: 'block', marginTop: '8px' }}>
-                                                            Snippet: "{snippets[factor.id]}"
-                                                        </Text>
-                                                    )
+                                                    selectedOptions[factor.id]?.map((option) => (
+                                                        snippets[factor.id]?.[option] && (
+                                                            <Text type="secondary" style={{ display: 'block', marginTop: '8px' }} key={option}>
+                                                                Snippet for "{option}": "{snippets[factor.id][option]}"
+                                                            </Text>
+                                                        )
+                                                    ))
                                                 )}
                                                 {/* 自定义选项输入框 */}
                                                 <div style={{ marginTop: '16px' }}>

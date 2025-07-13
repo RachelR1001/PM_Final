@@ -1,0 +1,57 @@
+[
+  {
+    "ts": "2025-07-13T11:57:36.130Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Inferred Purpose Category",
+      "value": "Likely Transactional or Developmental (depends heavily on 'relationship' choice)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:57:36.131Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Inferred Specific Topic Area",
+      "value": "Unknown (e.g., course question, research interest, administrative issue?)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:57:36.131Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Inferred Desired Call to Action",
+      "value": "Unknown (e.g., request for information, meeting, permission?)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:57:36.132Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Inferred Student's Current Status/Need",
+      "value": "Unknown (e.g., seeking help, providing information, requesting exception?)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-13T11:57:36.132Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Inferred Level of Background Information Needed",
+      "value": "Unknown (e.g., professor has prior context or needs full explanation?)"
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]
