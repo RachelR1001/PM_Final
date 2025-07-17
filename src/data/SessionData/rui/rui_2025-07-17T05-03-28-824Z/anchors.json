@@ -1,0 +1,10 @@
+{
+  "persona": {
+    "title": "Internal Project Team",
+    "description": "This group consists of internal colleagues and team members actively involved in or affected by an ongoing project. They rely on regular updates and clear communication to stay informed and align their work."
+  },
+  "situation": {
+    "title": "Project Update & Expectation Management",
+    "description": "This communication is an internal project status update, specifically addressing pending information or minor delays. The primary goal is to provide a progress report, set a new timeline for a comprehensive update, and manage team expectations."
+  }
+}

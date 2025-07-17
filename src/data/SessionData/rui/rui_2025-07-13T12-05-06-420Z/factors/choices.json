@@ -1,0 +1,25 @@
+[
+  {
+    "id": "relationship_type",
+    "title": "Relationship type",
+    "options": [
+      "Professor and Student"
+    ]
+  },
+  {
+    "id": "occasion",
+    "title": "Occasion",
+    "options": [
+      "Formal: Academic communication"
+    ]
+  },
+  {
+    "id": "you_want_receiver_feel",
+    "title": "You want the receiver to feel you are",
+    "options": [
+      "Gratitude / Appreciation 🙏",
+      "Apology / Regret 😔",
+      "Concern / Empathy 😨"
+    ]
+  }
+]

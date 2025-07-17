@@ -7,7 +7,7 @@ const app = express();
 const port = 3001;
 
 const geminiApiKey = 'AIzaSyDim8J8xzRTmPl1ve98-gQq8UueGZhH9s8'; // Gemini API Key
-const geminiApiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent?key=${geminiApiKey}`;
+const geminiApiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
 
 const factorList = require('../data/PredefinedData/factor_list.json'); // 引用 factor_list.json
 
@@ -1149,10 +1149,11 @@ app.post('/generate-anchor-builder', async (req, res) => {
         return res.status(500).json({ error: 'Failed to load prompt template' });
     }
 
+    // Replace placeholders in the prompt
     const prompt = promptTemplate.replace('{{USER_TASK}}', userTask);
 
     try {
-        const responseText = await sendRequestToGemini(prompt,  { enableThinking: true });
+        const responseText = await sendRequestToGemini(prompt, { enableThinking: true });
 
         if (!responseText) {
             return res.status(500).json({ error: 'AI response is empty' });
