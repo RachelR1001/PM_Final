@@ -1,17 +1,18 @@
 [
   {
-    "id": "relationship_type",
-    "title": "Relationship type",
-    "options": ["Supervisor and Student", "Friends and family", "Etc."]
+    "id": "affiliation",
+    "title": "Affiliation (Warmth / Friendliness)",
+    "options": ["Hostile", "Neutral", "Friendly / Warm"]
   },
   {
     "id": "familiarity",
     "title": "Familiarity",
     "options": [
+      "Strangers",
+      "Known but Unfamiliar",
+      "Superficially Familiar",
       "Familiar",
-      "Knows each other and establishes some intimacy",
-      "Knows each other but unfamiliar",
-      "Strangers"
+      "Close / Intimate"
     ]
   },
   {
@@ -20,12 +21,22 @@
     "options": ["Receiver is higher", "Equal", "Receiver is lower"]
   },
   {
-    "id": "maintain_relationship",
+    "id": "relationship_needs",
     "title": "Needs for Maintaining relationship",
     "options": ["Get far away", "Remain the same", "Get closer"]
   },
   {
-    "id": "culture",
+    "id": "demography_gender",
+    "title": "Gender of the receiver",
+    "options": ["Male", "Female", "Non-binary"]
+  },
+  {
+    "id": "demography_age",
+    "title": "Age of the receiver",
+    "options": []
+  },
+  {
+    "id": "demography_culture",
     "title": "Culture",
     "options": ["Direct Western Culture", "Indirect Eastern Culture"]
   },
@@ -35,12 +46,24 @@
     "options": ["Introverted", "Extroverted"]
   },
   {
+    "id": "communication_purpose",
+    "title": "Communication Purpose",
+    "options": [
+      "inform",
+      "persuade",
+      "build rapport",
+      "entertain",
+      "criticism",
+      "requests"
+    ]
+  },
+  {
     "id": "promptness",
     "title": "Promptness",
     "options": ["Urgent", "Non-urgent"]
   },
   {
-    "id": "you_want_receiver_feel",
+    "id": "emotion_to_convey",
     "title": "You want the receiver to feel you are",
     "options": [
       "Gratitude / Appreciation 🙏",
@@ -48,11 +71,12 @@
       "Apology / Regret 😔",
       "Frustration / Disappointment 😤",
       "Concern / Empathy 😨",
+      "acquiescent (submissive) 🙇 🙏",
       "Neutral Emotion ⚪"
     ]
   },
   {
-    "id": "you_want_avoid_receiver_feel",
+    "id": "emotion_to_avoid",
     "title": "You want to avoid the receiver from feeling you are",
     "options": [
       "Avoid Disrespectful / Aggressive 😡",
@@ -64,7 +88,7 @@
     ]
   },
   {
-    "id": "mistake_side",
+    "id": "mistake_attribution",
     "title": "The mistake is more on which side?",
     "options": ["Our side", "Receiver's side", "It’s not whose mistake"]
   },
@@ -82,8 +106,7 @@
     "options": [
       "Avoid being harsh",
       "Avoid breaking relationships",
-      "Avoid being criticized by the receiver",
-      "[To AI Helper: If you choose this factor as one of the most important factors, please generate several potential consequences which user may want to avoid in the given context, instead of directly using the given example]"
+      "Avoid being criticized by the receiver"
     ]
   },
   {
@@ -91,8 +114,7 @@
     "title": "Balance competing factors",
     "options": [
       "Show apology vs. clearly state my request",
-      "Clearly state my request but avoid hurting future relationships",
-      "[To AI Helper: If you choose this factor as one of the most important factors, please generate several potential competing factors which user may want to avoid in the given context, instead of directly using the given example. Please start with “Avoid xxxx”, highlight it is avoid something.]"
+      "Clearly state my request but avoid hurting future relationships"
     ]
   }
 ]
