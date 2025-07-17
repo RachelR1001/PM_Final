@@ -1135,31 +1135,58 @@ app.post('/generate-anchor-builder', async (req, res) => {
     const { userTask, userName, taskId } = req.body;
 
     if (!userTask || !userName || !taskId) {
-        return res.status(400).json({ error: 'Missing required fields in the request body' });
+        return res.status(400).json({ error: 'Missing required fields: userTask, userName, or taskId' });
     }
 
     const promptPath = path.join(__dirname, '../data/Prompts/anchor_builder.prompt.md');
+    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
+    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
     const anchorFilePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'anchors.json');
 
     let promptTemplate;
     try {
+        // Load the prompt template
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
     } catch (error) {
         console.error('Failed to load anchor_builder.prompt.md:', error);
         return res.status(500).json({ error: 'Failed to load prompt template' });
     }
 
+    // Read draft_latest content
+    let draftLatest = '';
+    try {
+        if (fs.existsSync(draftsPath)) {
+            draftLatest = fs.readFileSync(draftsPath, 'utf-8').trim();
+        }
+    } catch (error) {
+        console.error('Failed to read latest draft:', error);
+    }
+
+    // Read intent_current content
+    let intentCurrent = '[]';
+    try {
+        if (fs.existsSync(intentsPath)) {
+            intentCurrent = fs.readFileSync(intentsPath, 'utf-8').trim();
+        }
+    } catch (error) {
+        console.error('Failed to read current intents:', error);
+    }
+
     // Replace placeholders in the prompt
-    const prompt = promptTemplate.replace('{{USER_TASK}}', userTask);
+    const prompt = promptTemplate
+        .replace('{{ORIGINAL_TASK}}', userTask)
+        .replace('{{DRAFT_LATEST}}', draftLatest)
+        .replace('{{INTENT_CURRENT}}', intentCurrent);
 
     try {
+        // Send the prompt to the AI service
         const responseText = await sendRequestToGemini(prompt, { enableThinking: true });
 
         if (!responseText) {
             return res.status(500).json({ error: 'AI response is empty' });
         }
 
-        // Parse the response into JSON format
+        // Parse the AI response
         const sanitizedContent = responseText.replace(/```json|```/g, ''); // Remove Markdown-style code block delimiters
         let anchorData;
         try {

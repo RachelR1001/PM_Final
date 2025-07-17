@@ -92,10 +92,10 @@ const AnchorBuilder = () => {
     };
 
     const handleRegenerateAnchor = async () => {
-        const { userName, taskId } = location.state || {}; // Get userName and taskId from location.state
+        const { userName, taskId, userTask } = location.state || {}; // Get userName, taskId, and userTask from location.state
 
-        if (!userName || !taskId) {
-            message.error('Missing userName or taskId. Please try again.');
+        if (!userName || !taskId || !userTask) {
+            message.error('Missing userName, taskId, or userTask. Please try again.');
             return;
         }
 
@@ -108,6 +108,7 @@ const AnchorBuilder = () => {
             const response = await axios.post('http://localhost:3001/api/regenerate-anchor', {
                 userName,
                 taskId,
+                userTask, // Pass userTask to the backend
                 anchorType: selectedAnchorType,
                 userPrompt: editorPrompt,
             });
@@ -128,6 +129,33 @@ const AnchorBuilder = () => {
         } catch (error) {
             console.error('Error regenerating anchor:', error);
             message.error('Failed to regenerate anchor. Please try again.');
+        }
+    };
+
+    const handleSaveAndGenerateTemplate = async () => {
+        const { userName, taskId, userTask } = location.state || {}; // 从 location.state 获取 userName, taskId, userTask
+
+        if (!userName || !taskId || !userTask) {
+            message.error('Missing userName, taskId, or userTask. Please try again.');
+            return;
+        }
+
+        try {
+            const response = await axios.post('http://localhost:3001/generate-anchor-builder', {
+                userTask,
+                userName,
+                taskId,
+            });
+
+            if (response.status === 200) {
+                message.success('Anchor content generated successfully!');
+                console.log('Generated Anchor Data:', response.data.anchorData);
+            } else {
+                throw new Error('Failed to generate anchor content');
+            }
+        } catch (error) {
+            console.error('Error generating anchor content:', error);
+            message.error('Failed to generate anchor content. Please try again.');
         }
     };
 

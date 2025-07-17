@@ -1,10 +1,10 @@
 {
   "persona": {
-    "title": "Internal Project Team",
-    "description": "This group consists of internal colleagues and team members actively involved in or affected by an ongoing project. They rely on regular updates and clear communication to stay informed and align their work."
+    "title": "Academic Mentor & Advisor",
+    "description": "This persona describes an academic professional who provides mentorship, guidance, and specific support to students, particularly regarding their research, academic planning, and career development. The communication aims to foster a strong, respectful professional relationship for ongoing learning and collaboration, ensuring students feel supported and empowered in their academic journey."
   },
   "situation": {
-    "title": "Project Update & Expectation Management",
-    "description": "This communication is an internal project status update, specifically addressing pending information or minor delays. The primary goal is to provide a progress report, set a new timeline for a comprehensive update, and manage team expectations."
+    "title": "Expressing Specific Academic Gratitude",
+    "description": "This situation involves a student expressing genuine gratitude to a professor for specific, actionable support on an academic project or task. The primary goal extends beyond a simple thank you to strengthening the professional relationship and maintaining open lines for future collaboration and mentorship."
   }
 }
