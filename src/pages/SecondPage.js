@@ -143,10 +143,17 @@ const SecondPage = () => {
         const newSnippets = {};
         for (const option of selectedValues) {
             try {
+                const factorChoices = selectedCards.map((id) => ({
+                    id,
+                    title: factors.find((factor) => factor.id === id)?.title || '',
+                    options: selectedOptions[id] || [],
+                }));
+
                 const response = await axios.post('http://localhost:3001/generate-snippet', {
                     userTask,
                     factorName: factors.find((factor) => factor.id === factorId)?.title || '',
                     factorOption: option,
+                    factorChoices, // Pass FACTOR_CHOICES
                 });
 
                 if (response.data && response.data.snippet) {

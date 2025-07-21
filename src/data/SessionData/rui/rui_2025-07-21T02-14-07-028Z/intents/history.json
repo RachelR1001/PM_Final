@@ -1,0 +1,114 @@
+[
+  {
+    "ts": "2025-07-21T02:29:18.444Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Overall Tone & Formality",
+      "options": [
+        "Respectfully Conversational",
+        "Professional and Direct",
+        "Slightly Formal",
+        "Warm and Collegiate"
+      ]
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-21T02:29:18.444Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Opening & Greeting Style",
+      "options": [
+        "Hi Professor [Last Name]",
+        "Dear Professor [Last Name]",
+        "Hello Professor [Last Name]",
+        "Good Morning/Afternoon Professor [Last Name]"
+      ]
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-21T02:29:18.445Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Purpose Statement Approach",
+      "options": [
+        "Direct and Upfront",
+        "Brief Context, Then Purpose",
+        "Lead-in, Then Purpose",
+        "Implied Purpose (for updates)"
+      ]
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-21T02:29:18.445Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Contextual Detail Level",
+      "options": [
+        "Brief Reference to Ongoing Work",
+        "Assume Shared Understanding",
+        "Concise Summary of Background",
+        "Minimal Context, Direct Ask"
+      ]
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-21T02:29:18.446Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Request Phrasing (if applicable)",
+      "options": [
+        "Clear, Specific Ask",
+        "Offer Options for Professor",
+        "Polite Inquiry",
+        "Suggest Next Steps Collaboratively"
+      ]
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-21T02:29:18.446Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Call to Action/Next Steps",
+      "options": [
+        "Propose Concrete Action",
+        "Suggest Follow-up Discussion",
+        "Await Professor's Guidance",
+        "No Explicit Action Needed"
+      ]
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  },
+  {
+    "ts": "2025-07-21T02:29:18.447Z",
+    "action": "initial-load",
+    "prev": null,
+    "next": {
+      "dimension": "Closing Salutation",
+      "options": [
+        "Best,",
+        "Sincerely,",
+        "Regards,",
+        "Thanks,"
+      ]
+    },
+    "source": "AI › IntentAnalyzer v1",
+    "actor": "AI"
+  }
+]

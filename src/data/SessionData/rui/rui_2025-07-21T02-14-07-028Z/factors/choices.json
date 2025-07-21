@@ -1,0 +1,24 @@
+[
+  {
+    "id": "power_difference",
+    "title": "Power, resource, status, hierarchy difference",
+    "options": [
+      "Receiver is higher (professor)"
+    ]
+  },
+  {
+    "id": "familiarity",
+    "title": "Familiarity",
+    "options": [
+      "Familiar (research advisor, regular meetings)"
+    ]
+  },
+  {
+    "id": "communication_purpose",
+    "title": "Communication Purpose",
+    "options": [
+      "inform",
+      "requests (e.g., extension, recommendation letter, meeting)"
+    ]
+  }
+]

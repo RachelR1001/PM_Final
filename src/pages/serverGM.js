@@ -219,9 +219,9 @@ app.post('/rank-and-revise-factors', async (req, res) => {
 });
 
 app.post('/generate-snippet', async (req, res) => {
-    const { userTask, factorName, factorOption } = req.body;
+    const { userTask, factorName, factorOption, factorChoices } = req.body;
 
-    if (!userTask || !factorName || !factorOption) {
+    if (!userTask || !factorName || !factorOption || !factorChoices) {
         return res.status(400).json({ error: '缺少必要参数' });
     }
 
@@ -237,9 +237,10 @@ app.post('/generate-snippet', async (req, res) => {
 
     // 填充 prompt
     const prompt = promptTemplate
-        .replace('{{USER_TASK}}', userTask)
-        .replace('{{FACTOR_NAME}}', factorName)
-        .replace('{{FACTOR_OPTION}}', factorOption);
+        .replace('{{USER_TASK}}', userTask) // 替换用户任务
+        .replace('{{FACTOR_NAME}}', factorName) // 替换目标因子名称
+        .replace('{{FACTOR_OPTION}}', factorOption) // 替换目标因子选项
+        .replace(/{{FACTOR_CHOICES}}/g, JSON.stringify(factorChoices, null, 2)); // 替换因子选择列表（两处）
 
     try {
         // 调用 Gemini 服务生成 snippet
@@ -1141,6 +1142,7 @@ app.post('/generate-anchor-builder', async (req, res) => {
     const promptPath = path.join(__dirname, '../data/Prompts/anchor_builder.prompt.md');
     const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
     const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+    const factorsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'factors', 'choices.json');
     const anchorFilePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'anchors.json');
 
     let promptTemplate;
@@ -1172,11 +1174,22 @@ app.post('/generate-anchor-builder', async (req, res) => {
         console.error('Failed to read current intents:', error);
     }
 
+    // Read factor_choices content
+    let factorChoices = '[]';
+    try {
+        if (fs.existsSync(factorsPath)) {
+            factorChoices = fs.readFileSync(factorsPath, 'utf-8').trim();
+        }
+    } catch (error) {
+        console.error('Failed to read factor choices:', error);
+    }
+
     // Replace placeholders in the prompt
     const prompt = promptTemplate
         .replace('{{ORIGINAL_TASK}}', userTask)
         .replace('{{DRAFT_LATEST}}', draftLatest)
-        .replace('{{INTENT_CURRENT}}', intentCurrent);
+        .replace('{{INTENT_CURRENT}}', intentCurrent)
+        .replace('{{FACTOR_CHOICES}}', factorChoices);
 
     try {
         // Send the prompt to the AI service
