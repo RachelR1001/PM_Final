@@ -9,7 +9,7 @@ const port = 3001;
 const geminiApiKey = 'AIzaSyDim8J8xzRTmPl1ve98-gQq8UueGZhH9s8'; // Gemini API Key
 const geminiApiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
 
-const factorList = require('../data/PredefinedData/factor_list.json'); // 引用 factor_list.json
+const factorList = require('../../public/data/PredefinedData/factor_list.json'); // 引用 factor_list.json
 
 app.use(cors());
 app.use(express.json());
@@ -18,7 +18,7 @@ const MAX_RETRIES = 3;
 
 // 添加保存历史记录的辅助函数
 function saveIntentHistory(userName, taskId, action, prev, next, source, actor) {
-    const historyPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'history.json');
+    const historyPath = path.join(__dirname, '../../public/data/SessionData', userName, taskId, 'intents', 'history.json');
     
     try {
         let history = [];
@@ -49,7 +49,6 @@ function saveIntentHistory(userName, taskId, action, prev, next, source, actor) 
         console.error('保存历史记录时出错:', error);
     }
 }
-
 
 async function sendRequestToGemini(prompt, options = {}) {
     let retries = 0;
@@ -166,7 +165,7 @@ app.post('/rank-and-revise-factors', async (req, res) => {
     }
 
     // 加载 markdown 文件内容
-    const promptPath = path.join(__dirname, '../data/Prompts/contextual_factor_predictor.prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/contextual_factor_predictor.prompt.md');
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
@@ -226,7 +225,7 @@ app.post('/generate-snippet', async (req, res) => {
     }
 
     // 加载 prompt 模板
-    const promptPath = path.join(__dirname, '../data/Prompts/snippet_generator_prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/snippet_generator_prompt.md');
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
@@ -281,18 +280,23 @@ app.post('/create-session', (req, res) => {
             fs.mkdirSync(userPath, { recursive: true });
         }
 
-        // 创建或更新 anchors.json
-        const anchorsPath = path.join(userPath, 'anchors.json');
-        let anchorsData = {};
-        if (fs.existsSync(anchorsPath)) {
-            anchorsData = JSON.parse(fs.readFileSync(anchorsPath, 'utf-8'));
+        // 创建 PersonaAnchor 目录
+        const personaAnchorPath = path.join(userPath, 'PersonaAnchor');
+        if (!fs.existsSync(personaAnchorPath)) {
+            fs.mkdirSync(personaAnchorPath, { recursive: true });
         }
-        // 添加新的任务记录
-        anchorsData[taskId] = {
-            created_iso: new Date().toISOString(),
-            task_summary: userInput.substring(0, 100) // 截取前100个字符作为摘要
-        };
-        fs.writeFileSync(anchorsPath, JSON.stringify(anchorsData, null, 2));
+
+        // 创建 SituationAnchor 目录
+        const situationAnchorPath = path.join(userPath, 'SituationAnchor');
+        if (!fs.existsSync(situationAnchorPath)) {
+            fs.mkdirSync(situationAnchorPath, { recursive: true });
+        }
+
+        // 创建 AdaptiveStylebook 目录
+        const adaptiveStylebookPath = path.join(userPath, 'AdaptiveStylebook');
+        if (!fs.existsSync(adaptiveStylebookPath)) {
+            fs.mkdirSync(adaptiveStylebookPath, { recursive: true });
+        }
 
         // 创建任务目录
         if (!fs.existsSync(taskPath)) {
@@ -314,13 +318,36 @@ app.post('/create-session', (req, res) => {
             user: userName,
             task_id: taskId,
             created_iso: new Date().toISOString(),
-            original_task: userInput,
+            original_task: "", // Set original_task to an empty string
         };
         fs.writeFileSync(taskJsonPath, JSON.stringify(taskJsonContent, null, 2));
 
         // 创建 intents/history.json
         const historyPath = path.join(taskPath, 'intents', 'history.json');
         fs.writeFileSync(historyPath, JSON.stringify([], null, 2));
+
+        // 创建 intents/current.json
+        const currentPath = path.join(taskPath, 'intents', 'current.json');
+        fs.writeFileSync(currentPath, JSON.stringify([], null, 2));
+
+        // 创建 factors/choices.json
+        const choicesPath = path.join(taskPath, 'factors', 'choices.json');
+        fs.writeFileSync(choicesPath, JSON.stringify({}, null, 2));
+
+        // 创建 drafts/00_first.md, drafts/01_regen.md, drafts/latest.md
+        const draftsPath = path.join(taskPath, 'drafts');
+        fs.writeFileSync(path.join(draftsPath, '00_first.md'), '');
+        fs.writeFileSync(path.join(draftsPath, '01_regen.md'), '');
+        fs.writeFileSync(path.join(draftsPath, 'latest.md'), '');
+
+        // 创建 localized/001_variation.json, localized/002_direct_rewrite.json
+        const localizedPath = path.join(taskPath, 'localized');
+        fs.writeFileSync(path.join(localizedPath, '001_variation.json'), JSON.stringify({}, null, 2));
+        fs.writeFileSync(path.join(localizedPath, '002_direct_rewrite.json'), JSON.stringify({}, null, 2));
+
+        // 创建 logs/regen_01.json
+        const logsPath = path.join(taskPath, 'logs');
+        fs.writeFileSync(path.join(logsPath, 'regen_01.json'), JSON.stringify({}, null, 2));
 
         res.status(200).json({ message: 'Session 数据已创建', taskId });
     } catch (error) {
@@ -339,6 +366,7 @@ app.post('/save-factor-choices', (req, res) => {
 
     // 使用传入的taskId构建路径
     const factorChoicesPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'factors', 'choices.json');
+    console.log('Saving factor choices to:', factorChoicesPath);
 
     try {
         // 确保目录存在
@@ -362,7 +390,7 @@ app.post('/analyze-intent', async (req, res) => {
         return res.status(400).json({ error: 'userTask、factorChoices、userName 和 taskId 是必需的' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/intent_analyzer_prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/intent_analyzer_prompt.md');
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
@@ -377,7 +405,7 @@ app.post('/analyze-intent', async (req, res) => {
         .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2));
 
     // 使用传入的taskId构建路径
-    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+    const intentsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'intents', 'current.json');
 
     try {
         // Enable thinking budget ONLY for intent analysis
@@ -420,55 +448,38 @@ app.post('/analyze-intent', async (req, res) => {
 });
 
 app.post('/generate-first-draft', async (req, res) => {
-    const { userTask, factorChoices, intents, userName, taskId } = req.body;
+  const { userTask, factorChoices } = req.body;
 
-    if (!userTask || !factorChoices || !intents || !userName || !taskId) {
-        return res.status(400).json({ error: 'userTask、factorChoices、intents、userName 和 taskId 是必需的' });
+  if (!userTask || !factorChoices) {
+    return res.status(400).json({ error: 'userTask and factorChoices are required' });
+  }
+
+  const promptPath = path.join(__dirname, '../../public/data/Prompts/4first_draft_composer.prompt.md');
+  let promptTemplate;
+
+  try {
+    promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+  } catch (error) {
+    console.error('Failed to load 4first_draft_composer.prompt.md:', error);
+    return res.status(500).json({ error: 'Failed to load prompt template' });
+  }
+
+  const prompt = promptTemplate
+    .replace('{{USER_TASK}}', userTask)
+    .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2));
+
+  try {
+    const draftContent = await sendRequestToGemini(prompt);
+
+    if (!draftContent) {
+      throw new Error('AI response is empty');
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/first_draft_composer_prompt.md');
-    let promptTemplate;
-    try {
-        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
-    } catch (error) {
-        console.error('加载 first_draft_composer_prompt.md 文件失败:', error);
-        return res.status(500).json({ error: '加载 first_draft_composer_prompt.md 文件失败' });
-    }
-
-    // Generate the prompt by replacing placeholders
-    const prompt = promptTemplate
-        .replace('{{USER_TASK}}', userTask)
-        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
-        .replace('{{INTENT_CURRENT}}', JSON.stringify(intents, null, 2));
-
-    // Construct paths for 00_first.md and latest.md
-    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts');
-    const firstDraftPath = path.join(draftsPath, '00_first.md');
-    const latestDraftPath = path.join(draftsPath, 'latest.md');
-
-    try {
-        // Removed thinking budget - use default (disabled)
-        const draftContent = await sendRequestToGemini(prompt);
-
-        if (!draftContent) {
-            console.error('Gemini 响应为空:', draftContent);
-            throw new Error('Gemini 响应为空');
-        }
-
-        // Ensure the drafts directory exists
-        if (!fs.existsSync(draftsPath)) {
-            fs.mkdirSync(draftsPath, { recursive: true });
-        }
-
-        // Save the content to both 00_first.md and latest.md
-        fs.writeFileSync(firstDraftPath, draftContent.trim(), 'utf-8');
-        fs.writeFileSync(latestDraftPath, draftContent.trim(), 'utf-8');
-
-        res.json({ draft: draftContent.trim() });
-    } catch (error) {
-        console.error('Error generating first draft:', error);
-        res.status(500).json({ error: 'Error generating first draft' });
-    }
+    res.json({ draft: draftContent.trim() });
+  } catch (error) {
+    console.error('Error generating first draft:', error);
+    res.status(500).json({ error: 'Failed to generate first draft' });
+  }
 });
 
 // 提供 SessionData 文件的静态访问
@@ -520,7 +531,7 @@ app.post('/variation-maker', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/variation_maker_prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/variation_maker_prompt.md');
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
@@ -583,7 +594,7 @@ app.post('/variation-intent-analyzer', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/variation_intent_analyzer.prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/variation_intent_analyzer.prompt.md');
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
@@ -613,7 +624,7 @@ app.post('/variation-intent-analyzer', async (req, res) => {
         const parsedData = JSON.parse(jsonContent);
 
         // Build the path to the intents file
-        const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+        const intentsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'intents', 'current.json');
 
         // Read the current intents
         let currentIntents = [];
@@ -676,8 +687,14 @@ app.post('/variation-intent-analyzer', async (req, res) => {
 
 app.post('/sessiondata/:taskId/drafts/latest.md', (req, res) => {
     const { taskId } = req.params;
+    if (!taskId) {
+        console.error('Missing taskId in request');
+        return res.status(400).json({ error: 'Missing taskId' });
+    }
     const { content } = req.body;
 
+    console.log('Received taskId:', taskId); // Log taskId
+    console.log('Received content:', content); // Log content
     if (!content) {
         return res.status(400).json({ error: 'Content is required' });
     }
@@ -685,9 +702,19 @@ app.post('/sessiondata/:taskId/drafts/latest.md', (req, res) => {
     // Extract the username from the taskId
     const userName = taskId.split('_')[0];
     const filePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
+    console.log('Generated filePath:', filePath); // Log filePath
 
     try {
+        // Ensure the drafts directory exists
+        const draftsDir = path.dirname(filePath);
+        if (!fs.existsSync(draftsDir)) {
+            fs.mkdirSync(draftsDir, { recursive: true });
+        }
+
         fs.writeFileSync(filePath, content, 'utf-8');
+        // Log the content written to the file
+        const writtenContent = fs.readFileSync(filePath, 'utf-8');
+        console.log('Content written to file:', writtenContent);
         res.status(200).json({ message: 'Content saved successfully.' });
     } catch (error) {
         console.error('Error saving content to latest.md:', error);
@@ -715,7 +742,7 @@ app.post('/direct-rewriter', async (req, res) => {
         manualInstruction = '';
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/prompt_AI_rewrite.prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/prompt_AI_rewrite.prompt.md');
     let promptTemplate;
     try {
         // Load the prompt template
@@ -765,7 +792,7 @@ app.post('/rewrite-intent', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/prompt_AI_rewrite.prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/prompt_AI_rewrite.prompt.md');
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
@@ -783,8 +810,8 @@ app.post('/rewrite-intent', async (req, res) => {
         .replace('{{INTENT_CURRENT}}', JSON.stringify(intentCurrent, null, 2))
         .replace('{{USER_PROMPT}}', manualInstruction);
 
-    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
-    const historyPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'history.json');
+    const intentsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'intents', 'current.json');
+    const historyPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'intents', 'history.json');
 
     try {
         // Send the prompt to the AI service
@@ -867,7 +894,7 @@ app.post('/rewrite-intent', async (req, res) => {
 app.post('/selective-aspect-rewriter', async (req, res) => {
     const { userTask, draftLatest, factorChoices, intentCurrent, selectedContent, aspectsListJson, aspectsSelectionJson, userPrompt } = req.body;
 
-    const promptPath = path.join(__dirname, '../data/Prompts/selective_aspect_rewriter.prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/selective_aspect_rewriter.prompt.md');
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
@@ -927,7 +954,7 @@ app.post('/aspect-intent-analyzer', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/selective_aspect_rewriter.prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/selective_aspect_rewriter.prompt.md');
     let promptTemplate;
     try {
         promptTemplate = fs.readFileSync(promptPath, 'utf-8');
@@ -944,7 +971,7 @@ app.post('/aspect-intent-analyzer', async (req, res) => {
         .replace('{{SELECTED_CONTENT}}', selectedContent)
         .replace('{{ASPECTS_SELECTION_JSON}}', JSON.stringify(aspectsSelectionJson));
 
-    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+    const intentsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'intents', 'current.json');
 
     try {
         // Enable thinking budget for this request
@@ -1025,8 +1052,8 @@ app.post('/sessiondata/:taskId/intents/manual-update', (req, res) => {
     const userName = taskId.split('_')[0]; // 假设 taskId 格式为 userName_timestamp
 
     // 构建文件路径
-    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
-    const historyPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'history.json');
+    const intentsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'intents', 'current.json');
+    const historyPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'intents', 'history.json');
 
     try {
         // 更新 current.json
@@ -1082,8 +1109,8 @@ app.post('/regenerate-draft', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/email_regenerator.prompt.md');
-    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/email_regenerator.prompt.md');
+    const draftsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'drafts');
     const latestDraftPath = path.join(draftsPath, 'latest.md');
 
     let promptTemplate;
@@ -1139,11 +1166,11 @@ app.post('/generate-anchor-builder', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields: userTask, userName, or taskId' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/anchor_builder.prompt.md');
-    const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
-    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
-    const factorsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'factors', 'choices.json');
-    const anchorFilePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'anchors.json');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/anchor_builder.prompt.md');
+    const draftsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'drafts', 'latest.md');
+    const intentsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'intents', 'current.json');
+    const factorsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'factors', 'choices.json');
+    const anchorFilePath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'anchors.json');
 
     let promptTemplate;
     try {
@@ -1237,7 +1264,7 @@ app.post('/api/update-anchor', (req, res) => {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
-    const anchorFilePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'anchors.json');
+    const anchorFilePath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'anchors.json');
 
     try {
         // Read the existing anchor.json file
@@ -1267,8 +1294,8 @@ app.post('/api/regenerate-anchor', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields in the request body' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/anchor_editor.prompt.md');
-    const anchorFilePath = path.join(__dirname, '../data/SessionData', userName, taskId, 'anchors.json');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/anchor_editor.prompt.md');
+    const anchorFilePath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'anchors.json');
 
     let promptTemplate;
     try {
@@ -1337,7 +1364,7 @@ app.post('/api/regenerate-anchor', async (req, res) => {
 
 app.get('/api/anchors/:userName', (req, res) => {
     const { userName } = req.params;
-    const userPath = path.join(__dirname, '../data/SessionData', userName);
+    const userPath = path.join(__dirname, '../public/data/SessionData', userName);
 
     if (!fs.existsSync(userPath)) {
         return res.status(404).json({ error: `User directory not found for ${userName}` });
@@ -1387,7 +1414,7 @@ app.post('/generate-contextual-draft', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields: taskId or userName' });
     }
 
-    const promptPath = path.join(__dirname, '../data/Prompts/contextual_first_draft_composer.prompt.md');
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/contextual_first_draft_composer.prompt.md');
     let promptTemplate;
 
     try {
@@ -1414,7 +1441,7 @@ app.post('/generate-contextual-draft', async (req, res) => {
         }
 
         // 保存草稿到对应的 taskId
-        const draftsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts');
+        const draftsPath = path.join(__dirname, '../public/data/SessionData', userName, taskId, 'drafts');
         const latestDraftPath = path.join(draftsPath, 'latest.md');
 
         // 确保 drafts 目录存在
@@ -1437,6 +1464,54 @@ app.post('/generate-contextual-draft', async (req, res) => {
         res.status(500).json({ error: 'Failed to generate contextual draft.' });
     }
 });
+
+app.post('/component-extractor', async (req, res) => {
+    const { taskId, userName } = req.body;
+
+    if (!taskId || !userName) {
+        return res.status(400).json({ error: 'Missing required fields: taskId or userName' });
+    }
+
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/5component_extractor.prompt.md');
+    const latestDraftPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
+
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load 5component_extractor.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    let draftContent;
+    try {
+        if (fs.existsSync(latestDraftPath)) {
+            draftContent = fs.readFileSync(latestDraftPath, 'utf-8').trim();
+        } else {
+            return res.status(404).json({ error: 'latest.md not found' });
+        }
+    } catch (error) {
+        console.error('Failed to read latest.md:', error);
+        return res.status(500).json({ error: 'Failed to read latest.md' });
+    }
+
+    const prompt = promptTemplate.replace('{{DRAFT_LATEST}}', draftContent);
+
+    try {
+        const responseText = await sendRequestToGemini(prompt);
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        console.log('Component Extractor Output:', responseText);
+        res.json({ components: responseText });
+    } catch (error) {
+        console.error('Error in Component Extractor:', error);
+        res.status(500).json({ error: 'Error in Component Extractor' });
+    }
+});
+
 
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
