@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createEditor, Editor, Transforms, Range, Text } from 'slate';
 import { Slate, Editable, withReact, useSlate, ReactEditor } from 'slate-react';
-import { Card, Typography, message, Button, Row, Col, Tooltip, Tag } from 'antd';
+import { Card, Typography, message, Button, Row, Col, Tooltip, Tag, Radio, Checkbox, Flex } from 'antd';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../App';
@@ -321,6 +321,8 @@ const EmailEditor = () => {
     const [floatingToolbar, setFloatingToolbar] = useState({ visible: false, component: null, position: null });
     const editorRef = useRef(null);
     const [originalText, setOriginalText] = useState('');
+    // Add this state near other useState declarations
+    const [combinedResults, setCombinedResults] = useState([]);
 
     // Load draft content on component mount
     useEffect(() => {
@@ -443,83 +445,200 @@ const EmailEditor = () => {
         }
     };
 
-    // Find text positions in the editor for highlighting
-    const findTextInEditor = (searchText) => {
-        const fullText = value
-            .map(node => getNodeText(editor, node))
+    // 改进的文本查找函数，支持模糊匹配和跨段落搜索
+    const findTextInEditor = (searchText, editorValue) => {
+        if (!searchText || !editorValue) return null;
+
+        // 构建完整的文本内容，保持段落间的换行
+        const fullText = editorValue
+            .map(node => getNodeText(null, node))
             .join('\n\n');
         
-        const index = fullText.toLowerCase().indexOf(searchText.toLowerCase());
-        if (index === -1) return null;
+        // 标准化搜索文本和全文（去除多余空格，统一换行）
+        const normalizeText = (text) => {
+            return text
+                .replace(/\s+/g, ' ')  // 将多个空格替换为单个空格
+                .replace(/\n+/g, ' ')  // 将换行替换为空格
+                .trim()
+                .toLowerCase();
+        };
         
+        const normalizedSearch = normalizeText(searchText);
+        const normalizedFull = normalizeText(fullText);
+        
+        console.log('Searching for:', normalizedSearch);
+        console.log('In text:', normalizedFull.substring(0, 200) + '...');
+        
+        // 在标准化文本中查找位置
+        let index = normalizedFull.indexOf(normalizedSearch);
+        
+        // 如果直接匹配失败，尝试部分匹配
+        if (index === -1) {
+            // 尝试匹配前80%的内容
+            const partialLength = Math.floor(normalizedSearch.length * 0.8);
+            const partialSearch = normalizedSearch.substring(0, partialLength);
+            index = normalizedFull.indexOf(partialSearch);
+            
+            if (index !== -1) {
+                console.log('Found partial match at index:', index);
+                return {
+                    start: index,
+                    end: index + partialSearch.length,
+                    fullText: normalizedFull,
+                    originalSearchText: searchText,
+                    isPartialMatch: true
+                };
+            }
+        }
+        
+        if (index === -1) {
+            console.log('Text not found');
+            return null;
+        }
+        
+        console.log('Found exact match at index:', index);
         return {
             start: index,
-            end: index + searchText.length,
-            fullText
+            end: index + normalizedSearch.length,
+            fullText: normalizedFull,
+            originalSearchText: searchText,
+            isPartialMatch: false
         };
     };
 
-    // Apply highlighting to editor content - 修复后的版本
-    const applyHighlighting = (componentContent, componentId) => {
-        // 首先完全清除所有高亮
-        const cleanValue = value.map(node => ({
+    // 改进的高亮应用函数，支持跨段落高亮
+    const applyHighlightingToValue = (editorValue, componentContent, componentId) => {
+        console.log('Applying highlighting for component:', componentId);
+        console.log('Component content:', componentContent);
+        
+        // 首先清除所有高亮
+        const cleanValue = editorValue.map(node => ({
             ...node,
             children: node.children.map(child => {
-                // 移除所有高亮相关的属性
                 const { highlight, componentId: oldComponentId, ...cleanChild } = child;
                 return cleanChild;
             })
         }));
 
-        const position = findTextInEditor(componentContent);
+        const position = findTextInEditor(componentContent, cleanValue);
         if (!position) {
-            setValue(cleanValue);
-            setEditorKey(prev => prev + 1);
-            return;
+            console.log('Position not found, returning clean value');
+            return cleanValue;
         }
 
-        // 在清理后的内容上应用新的高亮
-        let currentPos = 0;
-        const newValue = cleanValue.map(node => {
-            const nodeText = getNodeText(editor, node);
-            const nodeStart = currentPos;
-            const nodeEnd = currentPos + nodeText.length + 2; // +2 for paragraph breaks
-            
-            if (nodeStart <= position.start && position.end <= nodeEnd) {
-                // This node contains the text to highlight
-                const relativeStart = position.start - nodeStart;
-                const relativeEnd = position.end - nodeStart;
-                
-                const beforeText = nodeText.substring(0, relativeStart);
-                const highlightText = nodeText.substring(relativeStart, relativeEnd);
-                const afterText = nodeText.substring(relativeEnd);
-                
-                const newChildren = [];
-                if (beforeText) {
-                    newChildren.push({ text: beforeText });
-                }
-                if (highlightText) {
-                    newChildren.push({ 
-                        text: highlightText, 
-                        highlight: true, 
-                        componentId: componentId 
-                    });
-                }
-                if (afterText) {
-                    newChildren.push({ text: afterText });
-                }
-                
-                currentPos = nodeEnd;
-                return {
-                    ...node,
-                    children: newChildren.length > 0 ? newChildren : [{ text: nodeText }]
-                };
-            }
-            
-            currentPos = nodeEnd;
-            return node;
-        });
+        console.log('Found position:', position);
+
+        // 构建位置映射：从标准化文本位置映射到实际节点位置
+        let currentNormalizedPos = 0;
+        let nodePositions = [];
         
+        cleanValue.forEach((node, nodeIndex) => {
+            const nodeText = getNodeText(null, node);
+            const normalizedNodeText = nodeText.replace(/\s+/g, ' ').trim().toLowerCase();
+            
+            nodePositions.push({
+                nodeIndex,
+                originalText: nodeText,
+                normalizedText: normalizedNodeText,
+                normalizedStart: currentNormalizedPos,
+                normalizedEnd: currentNormalizedPos + normalizedNodeText.length,
+                node
+            });
+            
+            currentNormalizedPos += normalizedNodeText.length;
+            if (nodeIndex < cleanValue.length - 1) {
+                currentNormalizedPos += 1; // 段落间的空格
+            }
+        });
+
+        console.log('Node positions:', nodePositions);
+
+        // 找到需要高亮的节点范围
+        const highlightStart = position.start;
+        const highlightEnd = position.end;
+        
+        const affectedNodes = nodePositions.filter(pos => 
+            !(pos.normalizedEnd <= highlightStart || pos.normalizedStart >= highlightEnd)
+        );
+
+        console.log('Affected nodes:', affectedNodes);
+
+        if (affectedNodes.length === 0) {
+            return cleanValue;
+        }
+
+        // 应用高亮到受影响的节点
+        const newValue = cleanValue.map((node, nodeIndex) => {
+            const nodePos = nodePositions.find(pos => pos.nodeIndex === nodeIndex);
+            if (!nodePos || !affectedNodes.includes(nodePos)) {
+                return node;
+            }
+
+            // 计算在当前节点中的高亮范围
+            const nodeStart = Math.max(0, highlightStart - nodePos.normalizedStart);
+            const nodeEnd = Math.min(nodePos.normalizedText.length, highlightEnd - nodePos.normalizedStart);
+
+            console.log(`Node ${nodeIndex}: highlighting from ${nodeStart} to ${nodeEnd} in "${nodePos.normalizedText}"`);
+
+            if (nodeStart >= nodeEnd) {
+                return node;
+            }
+
+            // 在原始文本中找到对应位置（考虑到标准化时可能改变的空格）
+            const originalText = nodePos.originalText;
+            let originalStart = 0;
+            let originalEnd = originalText.length;
+
+            // 简单映射：如果是部分高亮，尝试在原文中找到相似的位置
+            if (nodeStart > 0 || nodeEnd < nodePos.normalizedText.length) {
+                // 对于部分匹配，使用比例来估算位置
+                const startRatio = nodeStart / nodePos.normalizedText.length;
+                const endRatio = nodeEnd / nodePos.normalizedText.length;
+                
+                originalStart = Math.floor(originalText.length * startRatio);
+                originalEnd = Math.ceil(originalText.length * endRatio);
+            }
+
+            // 确保边界有效
+            originalStart = Math.max(0, Math.min(originalStart, originalText.length));
+            originalEnd = Math.max(originalStart, Math.min(originalEnd, originalText.length));
+
+            console.log(`Mapping to original text positions: ${originalStart} to ${originalEnd}`);
+
+            // 分割文本并应用高亮
+            const beforeText = originalText.substring(0, originalStart);
+            const highlightText = originalText.substring(originalStart, originalEnd);
+            const afterText = originalText.substring(originalEnd);
+
+            const newChildren = [];
+            if (beforeText) {
+                newChildren.push({ text: beforeText });
+            }
+            if (highlightText) {
+                newChildren.push({ 
+                    text: highlightText, 
+                    highlight: true, 
+                    componentId: componentId 
+                });
+            }
+            if (afterText) {
+                newChildren.push({ text: afterText });
+            }
+
+            return {
+                ...node,
+                children: newChildren.length > 0 ? newChildren : [{ text: originalText }]
+            };
+        });
+
+        console.log('Applied highlighting, returning new value');
+        return newValue;
+    };
+
+    // 修复后的高亮应用函数
+    const applyHighlighting = (componentContent, componentId) => {
+        console.log('Applying highlighting for:', componentContent);
+        const newValue = applyHighlightingToValue(value, componentContent, componentId);
         setValue(newValue);
         setEditorKey(prev => prev + 1);
     };
@@ -620,6 +739,10 @@ const EmailEditor = () => {
 
     // Custom render functions for rich text elements
     const renderElement = ({ attributes, children, element }) => {
+        const paragraphStyle = {
+            marginBottom: '20px', // 增加段间距
+            marginTop: '0'
+        };
         switch (element.type) {
             case 'heading-one':
                 return <h1 {...attributes}>{children}</h1>;
@@ -649,26 +772,85 @@ const EmailEditor = () => {
             element = <u>{element}</u>;
         }
         
-        // Apply highlighting style
+        // Apply highlighting style with dimension buttons
         if (leaf.highlight) {
+            // Find the corresponding combined result for this component
+            const combinedResult = combinedResults.find(result => result.id === leaf.componentId);
+            const dimensions = combinedResult?.linkedIntents || [];
+            
             element = (
-                <span
-                    style={{
-                        backgroundColor: '#fff3cd',
-                        border: '1px solid #ffc107',
-                        borderRadius: '2px',
-                        padding: '1px 2px',
-                        cursor: 'pointer',
-                    }}
-                    onClick={(e) => handleHighlightClick(e, leaf.componentId)}
-                >
-                    {element}
+                <span style={{ position: 'relative', display: 'inline-block' }}>
+                    {/* Dimension buttons above the highlighted text */}
+                    {dimensions.length > 0 && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '-12px', // 从 -25px 改为 -12px，让按钮距离文本仅2px
+                            left: '0',
+                            display: 'flex',
+                            gap: '4px',
+                            zIndex: 10,
+                            flexWrap: 'wrap'
+                        }}>
+                            {dimensions.map((intent, index) => (
+                                <Button
+                                    key={`${leaf.componentId}-${index}`}
+                                    size="small"
+                                    shape="circle"
+                                    style={{
+                                        width: '10px',
+                                        height: '10px',
+                                        minWidth: '10px',
+                                        padding: '0',
+                                        fontSize: '8px',
+                                        backgroundColor: getDimensionColor(intent.dimension),
+                                        border: 'none',
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDimensionClick(intent, leaf.componentId);
+                                    }}
+                                    title={intent.dimension}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    
+                    <span
+                        style={{
+                            backgroundColor: '#fff3cd',
+                            border: '1px solid #ffc107',
+                            borderRadius: '2px',
+                            padding: '1px 2px',
+                            cursor: 'pointer',
+                            display: 'inline-block'
+                        }}
+                        onClick={(e) => handleHighlightClick(e, leaf.componentId)}
+                    >
+                        {element}
+                    </span>
                 </span>
             );
         }
         
         return <span {...attributes}>{element}</span>;
     };
+    // Add these helper functions before the return statement
+const getDimensionColor = (dimension) => {
+    // Generate consistent colors for each dimension
+    const colors = [
+        '#ff4d4f', '#1890ff', '#52c41a', '#faad14', 
+        '#722ed1', '#eb2f96', '#13c2c2', '#fa8c16'
+    ];
+    const hash = dimension.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+};
+
+const handleDimensionClick = (intent, componentId) => {
+    console.log('Dimension clicked:', intent.dimension, 'for component:', componentId);
+    // You can add logic here to show intent options or perform other actions
+    message.info(`Clicked dimension: ${intent.dimension}`);
+};
 
     // Handle keyboard shortcuts
     const handleKeyDown = (event) => {
@@ -758,6 +940,7 @@ const EmailEditor = () => {
             });
 
             console.log('Combined Result:', combinedResult);
+            setCombinedResults(combinedResult); // Store in state
         } catch (error) {
             console.error('Error processing combined result:', error);
         }
@@ -804,7 +987,8 @@ const EmailEditor = () => {
                 }}
             >
                 {contentLoaded ? (
-                    <Row style={{ height: '100%' }}>
+                    <div>
+                    <Row style={{ height: '80%', borderBottom: '1px solid #d9d9d9'}}>
                         <Col span={18}>
                             <div 
                                 ref={editorRef}
@@ -833,7 +1017,7 @@ const EmailEditor = () => {
                                                 padding: '16px',
                                                 minHeight: '500px',
                                                 outline: 'none',
-                                                lineHeight: '1.6',
+                                                lineHeight: '2.0',
                                             }}
                                         />
                                     </div>
@@ -857,7 +1041,7 @@ const EmailEditor = () => {
                                     padding: '16px',
                                     height: '100%',
                                     borderLeft: '1px solid #f0f0f0',
-                                    background: '#fafafa',
+                                    background: '#fff',
                                     display: 'flex',
                                     flexDirection: 'column',
                                 }}
@@ -944,6 +1128,34 @@ const EmailEditor = () => {
                             </div>
                         </Col>
                     </Row>
+                    <Row style={{ height: '20%' }}>
+                        <Col span={24}>
+                        <div style={{padding: '16px'}}>
+                            <p style={{fontWeight: 'bold', fontSize: '14px'}}>Intents</p> 
+                            <Button>Apply to Selected Component</Button>
+                            <Button>Cancel</Button>
+                        </div>
+                        <div className='intentCards'>
+                            <Flex wrap gap="small">
+                                {Array.from({ length: 5 }, (_, i) => (
+                                 <Card title="Card title" key={i}>
+                                 <Radio.Group
+                                     style={{display: 'flex',flexDirection: 'column',gap: 8}}
+                                     value={value}
+                                     options={[
+                                         { value: 1, label: 'Option A' },
+                                         { value: 2, label: 'Option B' },
+                                         { value: 3, label: 'Option C' }
+                                     ]}
+                                     ></Radio.Group>
+                                 </Card>
+                                ))}
+                            </Flex>
+                           
+                        </div>
+                        </Col>
+                    </Row>
+                    </div>
                 ) : (
                     <div
                         style={{

@@ -4,44 +4,35 @@
     "current_value": "Enthusiastic & Appreciative",
     "other_values": [
       "Formal & Direct",
-      "Neutral & Informative",
-      "Curious & Question-led"
+      "Humble & Inquisitive",
+      "Brief & Standard"
     ]
   },
   {
-    "dimension": "Communication Purpose Emphasis",
-    "current_value": "Inform, Build Rapport & Entertain",
+    "dimension": "Purpose Prioritization",
+    "current_value": "Rapport, Gratitude, then Inform",
     "other_values": [
-      "Primarily Inform",
-      "Focus on Building Rapport",
-      "Emphasize Entertainment (via enthusiasm)"
+      "Inform First, then Gratitude",
+      "Purely Informative",
+      "Primarily Rapport Building"
     ]
   },
   {
-    "dimension": "Expression of Gratitude",
-    "current_value": "Specific & Sincere",
+    "dimension": "Level of Specificity",
+    "current_value": "Prompts for Specific Examples",
     "other_values": [
-      "General & Brief",
-      "Implied through praise",
-      "Detailed with examples"
+      "General Praises Only",
+      "Highly Detailed Examples",
+      "No Specificity Required"
     ]
   },
   {
-    "dimension": "Enthusiasm Level",
-    "current_value": "High & Explicit",
+    "dimension": "Call to Action/Next Steps",
+    "current_value": "Implied Interest/Future Engagement",
     "other_values": [
-      "Subtle & Implied",
-      "Moderate & Factual",
-      "Context-dependent"
-    ]
-  },
-  {
-    "dimension": "Call to Action/Forward Look",
-    "current_value": "Future-oriented & Engaging",
-    "other_values": [
-      "None, purely informative",
-      "Direct question for follow-up",
-      "Open-ended for discussion"
+      "Explicit Question/Request",
+      "No Implied Action",
+      "Offer to Meet"
     ]
   }
 ]
