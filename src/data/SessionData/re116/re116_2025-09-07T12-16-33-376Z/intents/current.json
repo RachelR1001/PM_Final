@@ -1,38 +1,47 @@
 [
   {
     "dimension": "Opening Tone",
-    "current_value": "Enthusiastic & Appreciative",
+    "current_value": "Warm, enthusiastic",
     "other_values": [
-      "Formal & Direct",
-      "Humble & Inquisitive",
-      "Brief & Standard"
+      "Formal, direct",
+      "Brief, professional",
+      "Inquisitive"
     ]
   },
   {
     "dimension": "Purpose Prioritization",
-    "current_value": "Rapport, Gratitude, then Inform",
+    "current_value": "Inform, build rapport, entertain (enthusiasm)",
     "other_values": [
-      "Inform First, then Gratitude",
-      "Purely Informative",
-      "Primarily Rapport Building"
+      "Direct information transfer",
+      "Solely build rapport",
+      "Express specific gratitude only"
     ]
   },
   {
-    "dimension": "Level of Specificity",
-    "current_value": "Prompts for Specific Examples",
+    "dimension": "Gratitude Expression",
+    "current_value": "Specific, appreciative, and enthusiastic",
     "other_values": [
-      "General Praises Only",
-      "Highly Detailed Examples",
-      "No Specificity Required"
+      "General thank you",
+      "Subtle acknowledgment",
+      "Professional appreciation only"
     ]
   },
   {
-    "dimension": "Call to Action/Next Steps",
-    "current_value": "Implied Interest/Future Engagement",
+    "dimension": "Engagement Demonstration",
+    "current_value": "Highlighting enjoyment and future interest",
     "other_values": [
-      "Explicit Question/Request",
-      "No Implied Action",
-      "Offer to Meet"
+      "Stating general interest",
+      "Asking a direct question",
+      "Mentioning a specific concept"
+    ]
+  },
+  {
+    "dimension": "Closing Tone",
+    "current_value": "Reinforce gratitude, positive",
+    "other_values": [
+      "Standard professional",
+      "Forward-looking",
+      "Brief and neutral"
     ]
   }
 ]
