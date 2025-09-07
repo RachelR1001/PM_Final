@@ -18,7 +18,7 @@ const MAX_RETRIES = 3;
 
 // 添加保存历史记录的辅助函数
 function saveIntentHistory(userName, taskId, action, prev, next, source, actor) {
-    const historyPath = path.join(__dirname, '../../public/data/SessionData', userName, taskId, 'intents', 'history.json');
+    const historyPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'history.json');
     
     try {
         let history = [];

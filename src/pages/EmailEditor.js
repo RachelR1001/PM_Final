@@ -1,7 +1,7 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { createEditor, Editor, Transforms } from 'slate';
-import { Slate, Editable, withReact, useSlate } from 'slate-react';
-import { Card, Typography, message, Button, Row, Col } from 'antd';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { createEditor, Editor, Transforms, Range, Text } from 'slate';
+import { Slate, Editable, withReact, useSlate, ReactEditor } from 'slate-react';
+import { Card, Typography, message, Button, Row, Col, Tooltip, Tag } from 'antd';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../App';
@@ -78,6 +78,90 @@ const getNodeText = (editor, node) => {
         console.error('Error processing node:', node, error);
         return '';
     }
+};
+
+// Component that appears when text is selected/highlighted
+const FloatingToolbar = ({ component, onReplace, onClose, position }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState(component?.content || '');
+
+    if (!component || !position) return null;
+
+    const handleSave = () => {
+        onReplace(component.id, editText);
+        setIsEditing(false);
+        onClose();
+    };
+
+    const handleCancel = () => {
+        setEditText(component.content);
+        setIsEditing(false);
+        onClose();
+    };
+
+    return (
+        <div
+            style={{
+                position: 'absolute',
+                top: position.top - 80,
+                left: position.left,
+                background: 'white',
+                border: '1px solid #d9d9d9',
+                borderRadius: '6px',
+                padding: '12px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                zIndex: 1000,
+                minWidth: '320px',
+                maxWidth: '400px',
+            }}
+        >
+            <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666', fontWeight: 'bold' }}>
+                {component.title}
+            </div>
+            
+            {!isEditing ? (
+                <div>
+                    <div style={{ marginBottom: '8px', fontSize: '13px', lineHeight: '1.4' }}>
+                        {component.content}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <Button size="small" onClick={() => setIsEditing(true)}>
+                            Edit Component
+                        </Button>
+                        <Button size="small" onClick={onClose}>
+                            Close
+                        </Button>
+                    </div>
+                </div>
+            ) : (
+                <div>
+                    <textarea
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        style={{
+                            width: '100%',
+                            minHeight: '80px',
+                            marginBottom: '8px',
+                            padding: '8px',
+                            border: '1px solid #d9d9d9',
+                            borderRadius: '4px',
+                            resize: 'vertical',
+                            fontSize: '13px',
+                        }}
+                        placeholder="Edit component content..."
+                    />
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <Button size="small" onClick={handleCancel}>
+                            Cancel
+                        </Button>
+                        <Button size="small" type="primary" onClick={handleSave}>
+                            Save Changes
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 // Toolbar Button Component
@@ -176,17 +260,6 @@ const Toolbar = () => {
             >
                 H2
             </ToolbarButton>
-            
-            <ToolbarButton
-                format="paragraph"
-                isActive={isBlockActive(editor, 'paragraph')}
-                onMouseDown={(event) => {
-                    event.preventDefault();
-                    toggleBlock(editor, 'paragraph');
-                }}
-            >
-                P
-            </ToolbarButton>
 
             <div style={{ width: '1px', height: '24px', background: '#d9d9d9', margin: '0 8px' }} />
 
@@ -240,6 +313,12 @@ const EmailEditor = () => {
     const [loading, setLoading] = useState(true);
     const [contentLoaded, setContentLoaded] = useState(false);
     const [editorKey, setEditorKey] = useState(0);
+    const [components, setComponents] = useState([]);
+    const [selectedComponentId, setSelectedComponentId] = useState(null);
+    const [highlightedRanges, setHighlightedRanges] = useState([]);
+    const [floatingToolbar, setFloatingToolbar] = useState({ visible: false, component: null, position: null });
+    const editorRef = useRef(null);
+    const [originalText, setOriginalText] = useState('');
 
     // Load draft content on component mount
     useEffect(() => {
@@ -247,8 +326,9 @@ const EmailEditor = () => {
             try {
                 const response = await axios.get(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`);
                 const draftContent = response.data || 'No content available.';
+                setOriginalText(draftContent);
                 
-                // Parse content into Slate format
+                // Parse content into Slate format - preserve original structure
                 const slateContent = draftContent
                     .split('\n\n')
                     .filter(paragraph => paragraph.trim())
@@ -283,7 +363,6 @@ const EmailEditor = () => {
 
         if (taskId) {
             fetchDraft();
-            console.log('Get Id fetchDraft', taskId);
         } else {
             setValue([
                 {
@@ -295,6 +374,214 @@ const EmailEditor = () => {
             setLoading(false);
         }
     }, [taskId, globalTaskId]);
+
+    // Extract components using the component extractor
+    const handleExtractComponents = async () => {
+        try {
+            setLoading(true);
+            const response = await axios.post('http://localhost:3001/component-extractor', {
+                taskId: globalTaskId,
+                userName: globalUsername,
+            });
+
+            let extractedComponents = [];
+            try {
+                extractedComponents = JSON.parse(response.data.components);
+            } catch (e) {
+                const jsonMatch = response.data.components.match(/\[[\s\S]*\]/);
+                if (jsonMatch) {
+                    extractedComponents = JSON.parse(jsonMatch[0]);
+                } else {
+                    console.error('Could not parse components');
+                    message.error('Failed to parse components');
+                    return;
+                }
+            }
+
+            setComponents(extractedComponents);
+            message.success(`Extracted ${extractedComponents.length} components`);
+        } catch (error) {
+            console.error('Failed to extract components:', error);
+            message.error('Failed to extract components');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Find text positions in the editor for highlighting
+    const findTextInEditor = (searchText) => {
+        const fullText = value
+            .map(node => getNodeText(editor, node))
+            .join('\n\n');
+        
+        const index = fullText.toLowerCase().indexOf(searchText.toLowerCase());
+        if (index === -1) return null;
+        
+        return {
+            start: index,
+            end: index + searchText.length,
+            fullText
+        };
+    };
+
+    // Apply highlighting to editor content - 修复后的版本
+    const applyHighlighting = (componentContent, componentId) => {
+        // 首先完全清除所有高亮
+        const cleanValue = value.map(node => ({
+            ...node,
+            children: node.children.map(child => {
+                // 移除所有高亮相关的属性
+                const { highlight, componentId: oldComponentId, ...cleanChild } = child;
+                return cleanChild;
+            })
+        }));
+
+        const position = findTextInEditor(componentContent);
+        if (!position) {
+            setValue(cleanValue);
+            setEditorKey(prev => prev + 1);
+            return;
+        }
+
+        // 在清理后的内容上应用新的高亮
+        let currentPos = 0;
+        const newValue = cleanValue.map(node => {
+            const nodeText = getNodeText(editor, node);
+            const nodeStart = currentPos;
+            const nodeEnd = currentPos + nodeText.length + 2; // +2 for paragraph breaks
+            
+            if (nodeStart <= position.start && position.end <= nodeEnd) {
+                // This node contains the text to highlight
+                const relativeStart = position.start - nodeStart;
+                const relativeEnd = position.end - nodeStart;
+                
+                const beforeText = nodeText.substring(0, relativeStart);
+                const highlightText = nodeText.substring(relativeStart, relativeEnd);
+                const afterText = nodeText.substring(relativeEnd);
+                
+                const newChildren = [];
+                if (beforeText) {
+                    newChildren.push({ text: beforeText });
+                }
+                if (highlightText) {
+                    newChildren.push({ 
+                        text: highlightText, 
+                        highlight: true, 
+                        componentId: componentId 
+                    });
+                }
+                if (afterText) {
+                    newChildren.push({ text: afterText });
+                }
+                
+                currentPos = nodeEnd;
+                return {
+                    ...node,
+                    children: newChildren.length > 0 ? newChildren : [{ text: nodeText }]
+                };
+            }
+            
+            currentPos = nodeEnd;
+            return node;
+        });
+        
+        setValue(newValue);
+        setEditorKey(prev => prev + 1);
+    };
+
+    // 修复后的移除高亮函数
+    const removeAllHighlighting = () => {
+        const cleanValue = value.map(node => ({
+            ...node,
+            children: node.children.map(child => {
+                // 移除高亮属性但保留其他格式
+                const { highlight, componentId, ...cleanChild } = child;
+                return cleanChild;
+            })
+        }));
+        
+        setValue(cleanValue);
+        setSelectedComponentId(null);
+        setEditorKey(prev => prev + 1);
+    };
+
+    // 改进后的组件选择处理函数，添加调试信息
+    const handleComponentSelect = (component) => {
+        console.log('Selecting component:', component);
+        
+        if (selectedComponentId === component.id) {
+            // 如果点击的是已选中的组件，则取消选择
+            console.log('Deselecting component');
+            removeAllHighlighting();
+            return;
+        }
+        
+        // 设置新的选中状态
+        console.log('Setting selected component ID:', component.id);
+        setSelectedComponentId(component.id);
+        
+        // 直接应用新的高亮（applyHighlighting函数会先清除所有高亮）
+        applyHighlighting(component.content, component.id);
+    };
+
+    // Handle clicking on highlighted text
+    const handleHighlightClick = (event, componentId) => {
+        const component = components.find(c => c.id === componentId);
+        if (!component) return;
+
+        // Calculate toolbar position
+        const rect = event.target.getBoundingClientRect();
+        const editorRect = editorRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+        
+        setFloatingToolbar({
+            visible: true,
+            component: component,
+            position: {
+                top: rect.top - editorRect.top,
+                left: rect.left - editorRect.left,
+            },
+        });
+    };
+
+    // Handle component replacement
+    const handleComponentReplace = (componentId, newContent) => {
+        // Update components state
+        const updatedComponents = components.map(comp => 
+            comp.id === componentId ? { ...comp, content: newContent } : comp
+        );
+        setComponents(updatedComponents);
+
+        // Update the original text content
+        let updatedText = originalText;
+        const component = components.find(c => c.id === componentId);
+        if (component) {
+            updatedText = updatedText.replace(component.content, newContent);
+            setOriginalText(updatedText);
+        }
+
+        // Re-parse and update editor content
+        const slateContent = updatedText
+            .split('\n\n')
+            .filter(paragraph => paragraph.trim())
+            .map((paragraph) => ({
+                type: 'paragraph',
+                children: [{ text: paragraph.trim() }],
+            }));
+
+        setValue(slateContent);
+        
+        // Re-apply highlighting with new content
+        setTimeout(() => {
+            applyHighlighting(newContent, componentId);
+        }, 100);
+        
+        message.success('Component updated successfully');
+    };
+
+    // Close floating toolbar
+    const closeFloatingToolbar = () => {
+        setFloatingToolbar({ visible: false, component: null, position: null });
+    };
 
     // Custom render functions for rich text elements
     const renderElement = ({ attributes, children, element }) => {
@@ -315,16 +602,37 @@ const EmailEditor = () => {
     };
 
     const renderLeaf = ({ attributes, children, leaf }) => {
+        let element = children;
+        
         if (leaf.bold) {
-            children = <strong>{children}</strong>;
+            element = <strong>{element}</strong>;
         }
         if (leaf.italic) {
-            children = <em>{children}</em>;
+            element = <em>{element}</em>;
         }
         if (leaf.underline) {
-            children = <u>{children}</u>;
+            element = <u>{element}</u>;
         }
-        return <span {...attributes}>{children}</span>;
+        
+        // Apply highlighting style
+        if (leaf.highlight) {
+            element = (
+                <span
+                    style={{
+                        backgroundColor: '#fff3cd',
+                        border: '1px solid #ffc107',
+                        borderRadius: '2px',
+                        padding: '1px 2px',
+                        cursor: 'pointer',
+                    }}
+                    onClick={(e) => handleHighlightClick(e, leaf.componentId)}
+                >
+                    {element}
+                </span>
+            );
+        }
+        
+        return <span {...attributes}>{element}</span>;
     };
 
     // Handle keyboard shortcuts
@@ -356,10 +664,7 @@ const EmailEditor = () => {
 
     // Save draft function
     const handleSaveDraft = async () => {
-        const draftLatest = value
-            .map((node) => getNodeText(editor, node))
-            .filter((text) => text.trim())
-            .join('\n\n');
+        const draftLatest = originalText; // Use the original text with updates
 
         try {
             await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
@@ -379,22 +684,28 @@ const EmailEditor = () => {
                 flexDirection: 'column',
                 height: '100vh',
                 background: '#f5f5f5',
+                position: 'relative',
             }}
         >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <div style={{ fontSize: '24px', fontWeight: 'bold' }}>Email Draft Editor</div>
-                <div>
-                <Button>Regenerate Draft</Button>
-                <Button
-                    type="primary"
-                    onClick={handleSaveDraft}
-                >
-                    Save Draft
-                </Button>
-                <Button>Generate Anchors</Button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button>Regenerate Draft</Button>
+                    <Button
+                        type="primary"
+                        onClick={handleSaveDraft}
+                    >
+                        Save Draft
+                    </Button>
+                    <Button onClick={handleExtractComponents} loading={loading}>
+                        Generate Components
+                    </Button>
+                    <Button onClick={removeAllHighlighting}>
+                        Clear Highlighting
+                    </Button>
                 </div>
-                
             </div>
+            
             <Card
                 size="small"
                 style={{
@@ -402,50 +713,150 @@ const EmailEditor = () => {
                     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                 }}
                 bodyStyle={{
-                    overflowY: 'auto',
+                    padding: 0,
                     height: '100%',
                 }}
             >
                 {contentLoaded ? (
-                    <Row>
+                    <Row style={{ height: '100%' }}>
                         <Col span={18}>
-                    <div style={{
-                        background: '#fff',
-                        overflow: 'hidden',
-                    }}>
-                        <Slate
-                            key={editorKey}
-                            editor={editor}
-                            initialValue={value}
-                            onChange={(newValue) => setValue(newValue)}
-                        >
-                            {/* Render the toolbar */}
-                            <Toolbar />
-
-                            {/* Render the editable area */}
-                            <Editable
-                                renderElement={renderElement}
-                                renderLeaf={renderLeaf}
-                                onKeyDown={handleKeyDown}
-                                placeholder={loading ? 'Loading...' : 'Start typing...'}
+                            <div 
+                                ref={editorRef}
+                                style={{
+                                    background: '#fff',
+                                    height: '100%',
+                                    position: 'relative',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                }}
+                            >
+                                <Slate
+                                    key={editorKey}
+                                    editor={editor}
+                                    initialValue={value}
+                                    onChange={(newValue) => setValue(newValue)}
+                                >
+                                    <Toolbar />
+                                    <div style={{ flex: 1, overflow: 'auto' }}>
+                                        <Editable
+                                            renderElement={renderElement}
+                                            renderLeaf={renderLeaf}
+                                            onKeyDown={handleKeyDown}
+                                            placeholder={loading ? 'Loading...' : 'Start typing...'}
+                                            style={{
+                                                padding: '16px',
+                                                minHeight: '500px',
+                                                outline: 'none',
+                                                lineHeight: '1.6',
+                                            }}
+                                        />
+                                    </div>
+                                </Slate>
+                                
+                                {/* Floating Toolbar */}
+                                {floatingToolbar.visible && (
+                                    <FloatingToolbar
+                                        component={floatingToolbar.component}
+                                        onReplace={handleComponentReplace}
+                                        onClose={closeFloatingToolbar}
+                                        position={floatingToolbar.position}
+                                    />
+                                )}
+                            </div>
+                        </Col>
+                        
+                        <Col span={6}>
+                            <div 
                                 style={{
                                     padding: '16px',
-                                    minHeight: '500px',
-                                    outline: 'none',
+                                    height: '100%',
+                                    borderLeft: '1px solid #f0f0f0',
+                                    background: '#fafafa',
+                                    display: 'flex',
+                                    flexDirection: 'column',
                                 }}
-                            />
-                        </Slate>
-                    </div>
-                    </Col>
-                    <Col span={6}>
-                        <div className='componentList'>
-                            <div>
-                                <Button></Button>
-                                Greetings
+                            >
+                                <div style={{ 
+                                    fontWeight: 'bold', 
+                                    marginBottom: '16px',
+                                    fontSize: '14px',
+                                    color: '#333'
+                                }}>
+                                    Email Components ({components.length})
+                                </div>
+                                
+                                <div style={{ flex: 1, overflowY: 'auto' }}>
+                                    {components.length === 0 ? (
+                                        <div style={{ 
+                                            color: '#999', 
+                                            fontStyle: 'italic',
+                                            textAlign: 'center',
+                                            marginTop: '20px',
+                                            fontSize: '13px'
+                                        }}>
+                                            Click "Generate Components" to analyze email structure
+                                        </div>
+                                    ) : (
+                                        components.map((component, index) => (
+                                            <div
+                                                key={component.id}
+                                                style={{
+                                                    marginBottom: '8px',
+                                                    cursor: 'pointer',
+                                                    padding: '12px',
+                                                    backgroundColor: selectedComponentId === component.id ? '#e6f7ff' : 'white',
+                                                    border: selectedComponentId === component.id ? '1px solid #1890ff' : '1px solid #e8e8e8',
+                                                    borderRadius: '4px',
+                                                    transition: 'all 0.2s',
+                                                }}
+                                                onClick={() => handleComponentSelect(component)}
+                                            >
+                                                <div style={{ 
+                                                    display: 'flex', 
+                                                    alignItems: 'center',
+                                                    marginBottom: '6px'
+                                                }}>
+                                                    <Button 
+                                                        size="small" 
+                                                        type={selectedComponentId === component.id ? 'primary' : 'default'}
+                                                        style={{ 
+                                                            marginRight: '8px',
+                                                            minWidth: '24px',
+                                                            height: '24px',
+                                                            padding: '0',
+                                                            fontSize: '12px',
+                                                        }}
+                                                    >
+                                                        {index + 1}
+                                                    </Button>
+                                                    <div style={{ 
+                                                        fontSize: '12px',
+                                                        fontWeight: 'bold',
+                                                        color: selectedComponentId === component.id ? '#1890ff' : '#333',
+                                                        lineHeight: '1.3'
+                                                    }}>
+                                                        {component.title}
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* <div style={{
+                                                    fontSize: '11px',
+                                                    color: '#666',
+                                                    lineHeight: '1.3',
+                                                    marginLeft: '32px',
+                                                    display: '-webkit-box',
+                                                    WebkitLineClamp: 2,
+                                                    WebkitBoxOrient: 'vertical',
+                                                    overflow: 'hidden',
+                                                }}>
+                                                    {component.content}
+                                                </div> */}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
                             </div>
-
-                        </div>
-                    </Col>
+                        </Col>
                     </Row>
                 ) : (
                     <div

@@ -279,3 +279,33 @@ html, body {
   border-color: #d9d9d9;
   font-size: 14px;
 }
+
+/* --- 在 App.css 文件末尾添加以下样式 --- */
+
+/* 用于包裹每个可交互组件区块的样式 */
+.component-node {
+  padding: 10px;
+  margin: 6px 0;
+  border: 1px solid #f0f0f0; /* 默认的淡灰色边框 */
+  border-radius: 4px;
+  transition: background-color 0.2s, border-color 0.2s;
+  cursor: pointer;
+}
+
+/* 鼠标悬浮时的样式 */
+.component-node:hover {
+  background-color: #fafafa;
+}
+
+/* 组件被选中时的高亮样式 */
+.component-node.selected {
+  background-color: #e6f7ff; /* Ant Design 蓝的背景色 */
+  border-color: #91caff;   /* Ant Design 蓝的边框色 */
+}
+
+/* 右侧组件列表的容器样式 */
+.componentList {
+  padding: 10px;
+  border-left: 1px solid #f0f0f0;
+  height: 100%;
+}
