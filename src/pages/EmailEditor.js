@@ -291,6 +291,8 @@ const Toolbar = () => {
 
 const EmailEditor = () => {
     const location = useLocation();
+    const { state } = location;
+    const userTask = state?.userTask || '';
     const navigate = useNavigate();
     const editor = useMemo(() => withReact(createEditor()), []);
     const { globalState } = useGlobalContext();
@@ -299,7 +301,7 @@ const EmailEditor = () => {
     // Use global state
     const taskId = globalTaskId;
     const userName = globalUsername;
-    const userTask = globalUserTask;
+    // const userTask = globalUserTask;
     
     // Initial editor value
     const initialValue = useMemo(() => [
@@ -375,6 +377,10 @@ const EmailEditor = () => {
         }
     }, [taskId, globalTaskId]);
 
+    let commonComponents = [];
+    let linkResults = null;
+    let combinedResult = null;
+
     // Extract components using the component extractor
     const handleExtractComponents = async () => {
         try {
@@ -400,6 +406,35 @@ const EmailEditor = () => {
 
             setComponents(extractedComponents);
             message.success(`Extracted ${extractedComponents.length} components`);
+
+            commonComponents = extractedComponents;
+            console.log('Assigned Common Components:', commonComponents);
+
+            // Call the new intent-analyzer-new endpoint
+            try {
+                console.log('Global State:', { globalUsername, globalTaskId, userTask });
+                const intentResponse = await axios.post('http://localhost:3001/intent-analyzer-new', {
+                    userTask: userTask,
+                    userName: globalUsername,
+                    taskId: globalTaskId,
+                });
+                console.log('Intent Analyzer New Response:', intentResponse.data);
+
+                // Call the new component-intent-link endpoint
+                const linkResponse = await axios.post('http://localhost:3001/component-intent-link', {
+                    userName: globalUsername,
+                    taskId: globalTaskId,
+                    componentList: extractedComponents,
+                });
+
+                linkResults = typeof linkResponse.data.links === 'string' 
+                    ? JSON.parse(linkResponse.data.links) 
+                    : linkResponse.data.links;
+                console.log('Component-Intent Link Results:', linkResults);
+                handleCombinedResult();
+            } catch (intentError) {
+                console.error('Error calling intent-analyzer-new or component-intent-link:', intentError);
+            }
         } catch (error) {
             console.error('Failed to extract components:', error);
             message.error('Failed to extract components');
@@ -674,6 +709,57 @@ const EmailEditor = () => {
         } catch (error) {
             console.error('Error saving draft:', error);
             message.error('Failed to save draft. Please try again.');
+        }
+    };
+
+    const handleCombinedResult = async () => {
+        try {
+            // Fetch current intents from session data
+            const response = await axios.get(`http://localhost:3001/sessiondata/${globalTaskId}/intents/current.json`);
+            const currentIntents = response.data;
+
+            // Ensure commonComponents is an array
+            if (!Array.isArray(commonComponents)) {
+                throw new Error('commonComponents is not an array');
+            }
+
+            console.log('Link Results:', linkResults);
+            console.log('Current Intents:', currentIntents);
+
+            // Process linkResults, commonComponents, and currentIntents
+            combinedResult = commonComponents.map(component => {
+                // Find all linkResults related to this component
+                const linkedIntents = linkResults
+                    .filter(link => link.component_id === component.id)
+                    .map(link => {
+                        // Find the corresponding intent in currentIntents
+                        const intent = currentIntents.find(intent => {
+                            const normalizedDimension = intent.dimension.trim().toLowerCase();
+                            const normalizedIntentDimension = link.intent_dimension.trim().toLowerCase();
+                            return normalizedDimension === normalizedIntentDimension;
+                        });
+
+                        // Reconstruct the intent data
+                        return intent ? {
+                            dimension: intent.dimension,
+                            current_value: intent.current_value || 'N/A',
+                            other_values: intent.other_values || []
+                        } : null;
+                    })
+                    .filter(Boolean); // Remove null values
+
+                // Combine component details with its linked intents
+                return {
+                    id: component.id,
+                    title: component.title,
+                    content: component.content,
+                    linkedIntents
+                };
+            });
+
+            console.log('Combined Result:', combinedResult);
+        } catch (error) {
+            console.error('Error processing combined result:', error);
         }
     };
 

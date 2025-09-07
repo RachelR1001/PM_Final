@@ -1512,6 +1512,136 @@ app.post('/component-extractor', async (req, res) => {
     }
 });
 
+app.post('/intent-analyzer-new', async (req, res) => {
+    const { userTask, userName, taskId } = req.body;
+
+    if (!userTask || !userName || !taskId) {
+        return res.status(400).json({ error: 'Missing required fields: userTask, userName, or taskId' });
+    }
+
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/3intent_analyzer_prompt.md');
+    const factorChoicesPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'factors', 'choices.json');
+    const latestDraftPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'drafts', 'latest.md');
+    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load 3intent_analyzer_prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    let factorChoices;
+    try {
+        factorChoices = fs.readFileSync(factorChoicesPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to read factor choices:', error);
+        return res.status(500).json({ error: 'Failed to read factor choices' });
+    }
+
+    let latestDraft;
+    try {
+        latestDraft = fs.readFileSync(latestDraftPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to read latest draft:', error);
+        return res.status(500).json({ error: 'Failed to read latest draft' });
+    }
+
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', userTask)
+        .replace('{{FACTOR_CHOICES}}', factorChoices)
+        .replace('{{DRAFT_LATEST}}', latestDraft);
+
+    try {
+        const responseText = await sendRequestToGemini(prompt);
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        console.log('Raw AI Response:', responseText);
+
+        // Sanitize the response to extract valid JSON
+        const sanitizedResponse = responseText.replace(/```json|```/g, '').trim();
+
+        // Parse the sanitized response
+        let parsedData;
+        try {
+            parsedData = JSON.parse(sanitizedResponse);
+        } catch (error) {
+            console.error('Failed to parse sanitized response as JSON:', sanitizedResponse, error);
+            return res.status(500).json({ error: 'Failed to parse AI response as JSON' });
+        }
+
+        // Ensure the intents directory exists
+        const intentsDir = path.dirname(intentsPath);
+        if (!fs.existsSync(intentsDir)) {
+            fs.mkdirSync(intentsDir, { recursive: true });
+        }
+
+        // Save the parsed data to current.json
+        try {
+            fs.writeFileSync(intentsPath, JSON.stringify(parsedData, null, 2), 'utf-8');
+        } catch (error) {
+            console.error('Failed to write to current.json:', error);
+            return res.status(500).json({ error: 'Failed to save intents to current.json' });
+        }
+
+        res.json({ message: 'Intents saved successfully', intents: parsedData });
+    } catch (error) {
+        console.error('Error in Intent Analyzer New:', error);
+        res.status(500).json({ error: 'Error in Intent Analyzer New' });
+    }
+});
+
+app.post('/component-intent-link', async (req, res) => {
+    const { userName, taskId, componentList } = req.body;
+
+    if (!userName || !taskId || !componentList) {
+        return res.status(400).json({ error: 'Missing required fields: userName, taskId, or componentList' });
+    }
+
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/6component_intent_link.prompt.md');
+    const intentsPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'intents', 'current.json');
+
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load 6component_intent_link.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    let intentCurrent;
+    try {
+        intentCurrent = fs.readFileSync(intentsPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to read current intents:', error);
+        return res.status(500).json({ error: 'Failed to read current intents' });
+    }
+
+    const prompt = promptTemplate
+        .replace('{{COMPONENT_LIST}}', JSON.stringify(componentList, null, 2))
+        .replace('{{INTENT_CURRENT}}', intentCurrent);
+
+    try {
+        const responseText = await sendRequestToGemini(prompt);
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        console.log('Component-Intent Link Output:', responseText);
+        const sanitizedResponse = responseText.replace(/```json|```/g, '').trim();
+        console.log('Component-Intent Link Output:', sanitizedResponse);
+        res.json({ links: JSON.parse(sanitizedResponse) });
+    } catch (error) {
+        console.error('Error in Component-Intent Link:', error);
+        res.status(500).json({ error: 'Error in Component-Intent Link' });
+    }
+});
+
 
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);

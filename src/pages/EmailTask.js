@@ -153,7 +153,7 @@ const FirstPage = () => {
 
           if (componentResponse.status === 200) {
               console.log('Component Extractor Response:', componentResponse.data);
-              navigate('/emailEditor', { state: { draftContent: response.data.draft, components: componentResponse.data.components } });
+              navigate('/emailEditor', { state: { draftContent: response.data.draft, components: componentResponse.data.components, userTask } });
           } else {
               console.error('Failed to extract components:', componentResponse.data.error);
           }

@@ -1,0 +1,47 @@
+[
+  {
+    "dimension": "Opening Tone",
+    "current_value": "Enthusiastic & Appreciative",
+    "other_values": [
+      "Formal & Direct",
+      "Neutral & Informative",
+      "Curious & Question-led"
+    ]
+  },
+  {
+    "dimension": "Communication Purpose Emphasis",
+    "current_value": "Inform, Build Rapport & Entertain",
+    "other_values": [
+      "Primarily Inform",
+      "Focus on Building Rapport",
+      "Emphasize Entertainment (via enthusiasm)"
+    ]
+  },
+  {
+    "dimension": "Expression of Gratitude",
+    "current_value": "Specific & Sincere",
+    "other_values": [
+      "General & Brief",
+      "Implied through praise",
+      "Detailed with examples"
+    ]
+  },
+  {
+    "dimension": "Enthusiasm Level",
+    "current_value": "High & Explicit",
+    "other_values": [
+      "Subtle & Implied",
+      "Moderate & Factual",
+      "Context-dependent"
+    ]
+  },
+  {
+    "dimension": "Call to Action/Forward Look",
+    "current_value": "Future-oriented & Engaging",
+    "other_values": [
+      "None, purely informative",
+      "Direct question for follow-up",
+      "Open-ended for discussion"
+    ]
+  }
+]
