@@ -1,0 +1,38 @@
+[
+  {
+    "dimension": "Affiliation (Warmth / Friendliness)",
+    "current_value": "Neutral professional",
+    "other_values": [
+      "Slightly warm, appreciative",
+      "Direct, formal",
+      "Slightly distant"
+    ]
+  },
+  {
+    "dimension": "Communication Purpose",
+    "current_value": "Inform with emotional context",
+    "other_values": [
+      "Purely inform",
+      "Inform and request action",
+      "Inform and seek understanding"
+    ]
+  },
+  {
+    "dimension": "Emotion Conveyed Strategy",
+    "current_value": "Acknowledge mixed feelings (Gratitude & Frustration)",
+    "other_values": [
+      "Focus solely on gratitude",
+      "Focus solely on frustration",
+      "Maintain neutral factual tone"
+    ]
+  },
+  {
+    "dimension": "Tone for Frustration",
+    "current_value": "Explanatory, non-accusatory",
+    "other_values": [
+      "Direct, problem-focused",
+      "Vague, hinting",
+      "Apologetic, self-deprecating"
+    ]
+  }
+]

@@ -1642,6 +1642,54 @@ app.post('/component-intent-link', async (req, res) => {
     }
 });
 
+app.post('/intent-change-rewriter', async (req, res) => {
+    const {
+        userTask,
+        factorChoices,
+        draftLatest,
+        componentCurrent,
+        intentSelected,
+        intentOthers
+    } = req.body;
+
+    if (!userTask || !factorChoices || !draftLatest || !componentCurrent || !intentSelected || !intentOthers) {
+        return res.status(400).json({ error: 'Missing required fields in the request body' });
+    }
+
+    const promptPath = path.join(__dirname, '../../public/data/Prompts/7intent_change_rewriter.prompt.md');
+    let promptTemplate;
+    try {
+        promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+    } catch (error) {
+        console.error('Failed to load 7intent_change_rewriter.prompt.md:', error);
+        return res.status(500).json({ error: 'Failed to load prompt template' });
+    }
+
+    const prompt = promptTemplate
+        .replace('{{USER_TASK}}', userTask)
+        .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
+        .replace('{{DRAFT_LATEST}}', draftLatest)
+        .replace('{{COMPONENT_CURRENT}}', componentCurrent)
+        .replace('{{INTENT_SELECTED}}', JSON.stringify(intentSelected, null, 2))
+        .replace('{{INTENT_OTHERS}}', JSON.stringify(intentOthers, null, 2));
+
+    try {
+        const responseText = await sendRequestToGemini(prompt);
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        const sanitizedResponse = responseText.replace(/```json|```/g, '').trim();
+        const parsedData = JSON.parse(sanitizedResponse);
+
+        res.json(parsedData);
+    } catch (error) {
+        console.error('Error in Intent Change Rewriter:', error);
+        res.status(500).json({ error: 'Error in Intent Change Rewriter' });
+    }
+});
+
 
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);

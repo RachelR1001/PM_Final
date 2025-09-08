@@ -31,33 +31,12 @@ const FirstPage = () => {
     const [value, setValue] = useState('');
     const [showChat, setShowChat] = useState(false);
 
-    // const location = useLocation();
-    // const { userName = localUserName, taskId = '', created_iso = '' } = location.state || {};
     // Get the global state from the context
     const { globalState } = useGlobalContext();
     const { username: globalUsername, taskId: globalTaskId } = globalState;
 
     // Use the global state directly
     const [userTask, setUserTask] = useState('');
-
-    // useEffect(() => {
-    //     if (location.state) {
-    //         console.log('Received data:', { userName, taskId, created_iso });
-    //         // 同步更新 localStorage
-    //         if (userName) {
-    //             localStorage.setItem('username', userName);
-    //             setLocalUserName(userName);
-    //         }
-    //     } else {
-    //         // 如果 location.state 丢失，从 localStorage 恢复
-    //         const storedUsername = localStorage.getItem('username');
-    //         if (storedUsername) {
-    //             setLocalUserName(storedUsername);
-    //         }
-    //     }
-    // }, [location.state, userName]);
-
-    // const [userTask, setUserTask] = useState(''); // Add a state variable for userTask
 
     const handleSendAsync = () => {
       if (value.trim()) {
@@ -68,10 +47,82 @@ const FirstPage = () => {
       }
     };
 
+    const [factorData, setFactorData] = useState([]);
+    const [selectedValues, setSelectedValues] = useState({}); // To track selected values for each factor
+    const [selectedFactors, setSelectedFactors] = useState({}); // To track which factors are selected
+
+    // Initialize default selections when factorData is loaded
+    useEffect(() => {
+        if (Object.keys(factorData).length > 0) {
+            const defaultSelectedFactors = {};
+            const defaultSelectedValues = {};
+            
+            Object.entries(factorData).forEach(([category, factors]) => {
+                // Default select the first factor in each category
+                if (factors.length > 0) {
+                    const firstFactor = factors[0];
+                    defaultSelectedFactors[firstFactor.id] = true;
+                    
+                    // Set default option for the selected factor
+                    if (firstFactor.options && firstFactor.options.length > 0) {
+                        const validOptions = firstFactor.options.filter(option => option && option.value !== undefined);
+                        if (validOptions.length > 0) {
+                            if (firstFactor.select_type === 'single') {
+                                defaultSelectedValues[firstFactor.id] = validOptions[0].value;
+                            } else {
+                                defaultSelectedValues[firstFactor.id] = [validOptions[0].value];
+                            }
+                        }
+                    }
+                }
+            });
+            
+            setSelectedFactors(defaultSelectedFactors);
+            setSelectedValues(defaultSelectedValues);
+        }
+    }, [factorData]);
+
+    // Handle factor checkbox change
+    const handleFactorChange = (factorId, checked) => {
+        setSelectedFactors(prev => {
+            const newSelectedFactors = { ...prev, [factorId]: checked };
+            
+            // If unchecking a factor, remove its selected values
+            if (!checked) {
+                setSelectedValues(prevValues => {
+                    const newValues = { ...prevValues };
+                    delete newValues[factorId];
+                    return newValues;
+                });
+            } else {
+                // If checking a factor, set default option
+                const factor = Object.values(factorData).flat().find(f => f.id === factorId);
+                if (factor && factor.options && factor.options.length > 0) {
+                    const validOptions = factor.options.filter(option => option && option.value !== undefined);
+                    if (validOptions.length > 0) {
+                        setSelectedValues(prevValues => ({
+                            ...prevValues,
+                            [factorId]: factor.select_type === 'single' 
+                                ? validOptions[0].value 
+                                : [validOptions[0].value]
+                        }));
+                    }
+                }
+            }
+            
+            return newSelectedFactors;
+        });
+    };
+
     const handleMultipleChange = (factorId, option, factorOptions) => {
         // Add safety checks for undefined option
         if (!option || option.value === undefined) {
             console.warn('Invalid option passed to handleMultipleChange:', option);
+            return;
+        }
+
+        // Only allow changes if the factor is selected
+        if (!selectedFactors[factorId]) {
             return;
         }
 
@@ -83,7 +134,7 @@ const FirstPage = () => {
                 return prev;
             }
 
-            const currentValues = prev[factorId] || [validFactorOptions[0].value];
+            const currentValues = prev[factorId] || [];
             
             // Check if the option value is already selected
             const isSelected = currentValues.includes(option.value);
@@ -92,18 +143,25 @@ const FirstPage = () => {
             if (isSelected) {
                 // Remove the option if it's already selected
                 newValues = currentValues.filter(v => v !== option.value);
+                // Ensure at least one option is selected
+                if (newValues.length === 0) {
+                    newValues = [validFactorOptions[0].value];
+                }
             } else {
                 // Add the option if it's not selected
                 newValues = [...currentValues, option.value];
             }
 
-            // Ensure the first option remains selected unless explicitly deselected
-            if (!newValues.includes(validFactorOptions[0].value)) {
-                newValues.unshift(validFactorOptions[0].value);
-            }
-
             return { ...prev, [factorId]: newValues };
         });
+    };
+
+    const handleSingleChange = (factorId, value) => {
+        // Only allow changes if the factor is selected
+        if (!selectedFactors[factorId]) {
+            return;
+        }
+        setSelectedValues(prev => ({ ...prev, [factorId]: value }));
     };
 
     const [loading, setLoading] = useState(false);
@@ -112,17 +170,25 @@ const FirstPage = () => {
       setLoading(true); // Start loading
       try {
         console.log('Selected Values:', selectedValues);
+        console.log('Selected Factors:', selectedFactors);
+        
+        // Only include factor choices for selected factors
         const factorChoices = Object.entries(selectedValues).reduce((acc, [factorId, selectedOption]) => {
-          const factor = Object.values(factorData).flat().find(f => f.id === factorId);
-          if (factor) {
-            acc[factorId] = {
-              id: factor.id,
-              select_type: factor.select_type,
-              source: factor.source,
-              title: factor.title,
-              Category: factor.Category,
-              options: Array.isArray(selectedOption) ? selectedOption.map(value => ({ value, type: 'user-defined' })) : [{ value: selectedOption, type: 'user-defined' }]
-            };
+          // Only include if the factor is selected
+          if (selectedFactors[factorId]) {
+            const factor = Object.values(factorData).flat().find(f => f.id === factorId);
+            if (factor) {
+              acc[factorId] = {
+                id: factor.id,
+                select_type: factor.select_type,
+                source: factor.source,
+                title: factor.title,
+                Category: factor.Category,
+                options: Array.isArray(selectedOption) 
+                  ? selectedOption.map(value => ({ value, type: 'user-defined' })) 
+                  : [{ value: selectedOption, type: 'user-defined' }]
+              };
+            }
           }
           return acc;
         }, {});
@@ -170,9 +236,6 @@ const FirstPage = () => {
 
     const { TextArea } = Input;
 
-    const [factorData, setFactorData] = useState([]);
-    const [selectedValues, setSelectedValues] = useState({}); // To track selected values for each factor
-
     useEffect(() => {
         // Fetch the factor list JSON dynamically
         axios.get('/data/PredefinedData/factor_list.json')
@@ -188,10 +251,6 @@ const FirstPage = () => {
             })
             .catch(error => console.error('Error fetching factor list:', error));
     }, []);
-
-    const handleSingleChange = (factorId, value) => {
-        setSelectedValues(prev => ({ ...prev, [factorId]: value }));
-    };
 
     return (
         <Spin spinning={loading} tip="Generating draft...">
@@ -246,35 +305,56 @@ const FirstPage = () => {
                                             {Object.entries(factorData).map(([category, factors]) => (
                                                 <Col span={12} key={category}>
                                                     <Card title={category} variant="borderless">
-                                                        <Collapse defaultActiveKey={factors.length > 0 ? [factors[0].id] : []} collapsible="icon">
-                                                            {factors.map(factor => {
+                                                        <Collapse 
+                                                            defaultActiveKey={factors.length > 0 ? [factors[0].id] : []} 
+                                                            collapsible="icon"
+                                                        >
+                                                            {factors.map((factor, index) => {
                                                                 // Ensure factor.options exists and filter out invalid options
                                                                 const validOptions = factor.options?.filter(option => option && option.value !== undefined) || [];
+                                                                const isFactorSelected = selectedFactors[factor.id] || false;
                                                                 
                                                                 return (
                                                                     <Collapse.Panel
                                                                         header={
                                                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                                    <Checkbox style={{ marginRight: '8px' }} defaultChecked={factors[0]?.id === factor.id} />
+                                                                                    <Checkbox 
+                                                                                        style={{ marginRight: '8px' }} 
+                                                                                        checked={isFactorSelected}
+                                                                                        onChange={(e) => {
+                                                                                            e.stopPropagation(); // Prevent collapse toggle
+                                                                                            handleFactorChange(factor.id, e.target.checked);
+                                                                                        }}
+                                                                                    />
                                                                                     {factor.title}
                                                                                 </div>
-                                                                                <div style={{ maxWidth: '150px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', color: '#4096ff', fontSize: '12px' }}>
-                                                                                    {factor.select_type === 'single'
-                                                                                        ? selectedValues[factor.id] || (validOptions.length > 0 ? validOptions[0].value : 'N/A')
-                                                                                        : (selectedValues[factor.id] || (validOptions.length > 0 ? [validOptions[0].value] : ['N/A'])).length > 1
-                                                                                            ? `${(selectedValues[factor.id] || (validOptions.length > 0 ? [validOptions[0].value] : ['N/A']))[0]}...`
-                                                                                            : (selectedValues[factor.id] || (validOptions.length > 0 ? [validOptions[0].value] : ['N/A']))[0]}
+                                                                                <div style={{ 
+                                                                                    maxWidth: '150px', 
+                                                                                    textOverflow: 'ellipsis', 
+                                                                                    overflow: 'hidden', 
+                                                                                    whiteSpace: 'nowrap', 
+                                                                                    color: isFactorSelected ? '#4096ff' : '#ccc', 
+                                                                                    fontSize: '12px' 
+                                                                                }}>
+                                                                                    {isFactorSelected ? (
+                                                                                        factor.select_type === 'single'
+                                                                                            ? selectedValues[factor.id] || (validOptions.length > 0 ? validOptions[0].value : 'N/A')
+                                                                                            : (selectedValues[factor.id] || (validOptions.length > 0 ? [validOptions[0].value] : ['N/A'])).length > 1
+                                                                                                ? `${(selectedValues[factor.id] || (validOptions.length > 0 ? [validOptions[0].value] : ['N/A']))[0]}...`
+                                                                                                : (selectedValues[factor.id] || (validOptions.length > 0 ? [validOptions[0].value] : ['N/A']))[0]
+                                                                                    ) : 'Not selected'}
                                                                                 </div>
                                                                             </div>
                                                                         }
                                                                         key={factor.id}
                                                                     >
-                                                                        <div>
+                                                                        <div style={{ opacity: isFactorSelected ? 1 : 0.5 }}>
                                                                             {factor.select_type === 'single' ? (
                                                                                 <Radio.Group
                                                                                     onChange={e => handleSingleChange(factor.id, e.target.value)}
                                                                                     value={selectedValues[factor.id] || (validOptions.length > 0 ? validOptions[0].value : '')}
+                                                                                    disabled={!isFactorSelected}
                                                                                 >
                                                                                     {validOptions.map(option => (
                                                                                         <Radio key={option.value} value={option.value}>
@@ -289,11 +369,17 @@ const FirstPage = () => {
                                                                                             <Tag.CheckableTag
                                                                                                 key={option.value}
                                                                                                 checked={
-                                                                                                    selectedValues[factor.id]?.length > 0
-                                                                                                        ? selectedValues[factor.id].includes(option.value)
-                                                                                                        : option.value === validOptions[0].value
+                                                                                                    isFactorSelected && (
+                                                                                                        selectedValues[factor.id]?.length > 0
+                                                                                                            ? selectedValues[factor.id].includes(option.value)
+                                                                                                            : option.value === validOptions[0].value
+                                                                                                    )
                                                                                                 }
                                                                                                 onChange={() => handleMultipleChange(factor.id, option, validOptions)}
+                                                                                                style={{ 
+                                                                                                    opacity: isFactorSelected ? 1 : 0.5,
+                                                                                                    pointerEvents: isFactorSelected ? 'auto' : 'none'
+                                                                                                }}
                                                                                             >
                                                                                                 {option.value}
                                                                                             </Tag.CheckableTag>
@@ -310,10 +396,11 @@ const FirstPage = () => {
                                                                                     value={selectedValues[`input_${factor.id}`] || ''}
                                                                                     onChange={e => setSelectedValues(prev => ({ ...prev, [`input_${factor.id}`]: e.target.value }))}
                                                                                     style={{ marginRight: '8px', flex: 1 }}
+                                                                                    disabled={!isFactorSelected}
                                                                                 />
                                                                                 <Button
                                                                                     type="primary"
-                                                                                    disabled={!selectedValues[`input_${factor.id}`]?.trim()}
+                                                                                    disabled={!isFactorSelected || !selectedValues[`input_${factor.id}`]?.trim()}
                                                                                     onClick={() => {
                                                                                         const newOptionValue = selectedValues[`input_${factor.id}`].trim();
                                                                                         const newOption = { value: newOptionValue, type: 'user-defined' };

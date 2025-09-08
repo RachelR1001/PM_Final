@@ -323,6 +323,7 @@ const EmailEditor = () => {
     const [originalText, setOriginalText] = useState('');
     // Add this state near other useState declarations
     const [combinedResults, setCombinedResults] = useState([]);
+    const [previewContent, setPreviewContent] = useState('');
     
 
     // Load draft content on component mount
@@ -369,10 +370,6 @@ const EmailEditor = () => {
 
         if (taskId) {
             fetchDraft();
-            if (combinedResults.length > 0 && value.length > 0) {
-                // Apply dimension markers to all components
-                applyAllDimensions();
-            }
         } else {
             setValue([
                 {
@@ -383,7 +380,7 @@ const EmailEditor = () => {
             setContentLoaded(true);
             setLoading(false);
         }
-    }, [taskId, globalTaskId, combinedResults]);
+    }, [taskId, globalTaskId]);
 
     let commonComponents = [];
     let linkResults = null;
@@ -472,49 +469,74 @@ const EmailEditor = () => {
         }
     };
 
-    // 改进的文本查找函数，支持模糊匹配和跨段落搜索
+    // 改进的文本查找函数，支持精确匹配和跨段落搜索
     const findTextInEditor = (searchText, editorValue) => {
         if (!searchText || !editorValue) return null;
 
-        // 构建完整的文本内容，保持段落间的换行
-        const fullText = editorValue
-            .map(node => getNodeText(null, node))
-            .join('\n\n');
+        // 构建完整的文本内容和位置映射
+        let fullText = '';
+        let nodeMap = [];
+        let currentPos = 0;
         
-        // 标准化搜索文本和全文（去除多余空格，统一换行）
-        const normalizeText = (text) => {
+        editorValue.forEach((node, nodeIndex) => {
+            const nodeText = getNodeText(null, node);
+            const nodeStart = currentPos;
+            const nodeEnd = currentPos + nodeText.length;
+            
+            nodeMap.push({
+                nodeIndex,
+                nodeText,
+                start: nodeStart,
+                end: nodeEnd,
+                node
+            });
+            
+            fullText += nodeText;
+            currentPos = nodeEnd;
+            
+            // 段落间添加分隔符
+            if (nodeIndex < editorValue.length - 1) {
+                fullText += '\n\n';
+                currentPos += 2;
+            }
+        });
+        
+        // 更精确的文本标准化
+        const normalizeForSearch = (text) => {
             return text
-                .replace(/\s+/g, ' ')  // 将多个空格替换为单个空格
-                .replace(/\n+/g, ' ')  // 将换行替换为空格
-                .trim()
-                .toLowerCase();
+                .replace(/[\r\n]+/g, ' ')  // 换行转空格
+                .replace(/\s+/g, ' ')      // 多空格转单空格
+                .trim();
         };
         
-        const normalizedSearch = normalizeText(searchText);
-        const normalizedFull = normalizeText(fullText);
+        const searchNormalized = normalizeForSearch(searchText).toLowerCase();
+        const fullNormalized = normalizeForSearch(fullText).toLowerCase();
         
-        console.log('Searching for:', normalizedSearch);
-        console.log('In text:', normalizedFull.substring(0, 200) + '...');
+        console.log('Searching for:', searchNormalized);
+        console.log('In text:', fullNormalized.substring(0, 200) + '...');
         
-        // 在标准化文本中查找位置
-        let index = normalizedFull.indexOf(normalizedSearch);
+        // 精确匹配
+        let index = fullNormalized.indexOf(searchNormalized);
         
-        // 如果直接匹配失败，尝试部分匹配
+        // 如果精确匹配失败，尝试更宽松的匹配
         if (index === -1) {
-            // 尝试匹配前80%的内容
-            const partialLength = Math.floor(normalizedSearch.length * 0.8);
-            const partialSearch = normalizedSearch.substring(0, partialLength);
-            index = normalizedFull.indexOf(partialSearch);
+            // 移除标点符号再试
+            const searchClean = searchNormalized.replace(/[^\w\s]/g, '');
+            const fullClean = fullNormalized.replace(/[^\w\s]/g, '');
+            index = fullClean.indexOf(searchClean);
             
             if (index !== -1) {
-                console.log('Found partial match at index:', index);
-                return {
-                    start: index,
-                    end: index + partialSearch.length,
-                    fullText: normalizedFull,
-                    originalSearchText: searchText,
-                    isPartialMatch: true
-                };
+                // 映射回原始位置
+                let charCount = 0;
+                for (let i = 0; i < fullNormalized.length; i++) {
+                    if (fullNormalized[i].match(/[\w\s]/)) {
+                        if (charCount === index) {
+                            index = i;
+                            break;
+                        }
+                        charCount++;
+                    }
+                }
             }
         }
         
@@ -523,15 +545,16 @@ const EmailEditor = () => {
             return null;
         }
         
-        console.log('Found exact match at index:', index);
-        // 进一步限制匹配长度，确保不会超出预期边界
-        const actualEnd = Math.min(index + normalizedSearch.length, normalizedFull.length);
+        const endIndex = index + searchNormalized.length;
+        console.log('Found match at normalized position:', index, 'to', endIndex);
+        
         return {
             start: index,
-            end: index + normalizedSearch.length,
-            fullText: normalizedFull,
-            originalSearchText: searchText,
-            isPartialMatch: false
+            end: endIndex,
+            fullText: fullNormalized,
+            originalText: fullText,
+            nodeMap,
+            originalSearchText: searchText
         };
     };
 
@@ -543,14 +566,13 @@ const EmailEditor = () => {
         const combinedResult = combinedResults.find(result => result.id === componentId);
         const linkedIntents = combinedResult?.linkedIntents || [];
         
-        // 正确地只清除highlight属性，保留dimension相关属性
+        // 清除所有highlight属性，保留dimension相关属性
         const cleanValue = editorValue.map(node => ({
             ...node,
             children: node.children.map(child => {
                 if (typeof child === 'string') {
                     return child;
                 }
-                // 只移除highlight属性，保留其他所有属性
                 const { highlight, ...cleanChild } = child;
                 return cleanChild;
             })
@@ -563,199 +585,134 @@ const EmailEditor = () => {
         }
     
         console.log('Found position:', position);
-    
-        // 构建位置映射：从标准化文本位置映射到实际节点位置
-        let currentNormalizedPos = 0;
-        let nodePositions = [];
         
-        cleanValue.forEach((node, nodeIndex) => {
-            const nodeText = getNodeText(null, node);
-            const normalizedNodeText = nodeText.replace(/\s+/g, ' ').trim().toLowerCase();
-            
-            nodePositions.push({
-                nodeIndex,
-                originalText: nodeText,
-                normalizedText: normalizedNodeText,
-                normalizedStart: currentNormalizedPos,
-                normalizedEnd: currentNormalizedPos + normalizedNodeText.length,
-                node
-            });
-            
-            currentNormalizedPos += normalizedNodeText.length;
-            if (nodeIndex < cleanValue.length - 1) {
-                currentNormalizedPos += 1; // 段落间的空格
-            }
-        });
-    
-        console.log('Node positions:', nodePositions);
-    
-        // 找到需要高亮的节点范围
+        // 使用新的nodeMap进行精确位置映射
+        const { nodeMap, originalText } = position;
         const highlightStart = position.start;
         const highlightEnd = position.end;
         
-        const affectedNodes = nodePositions.filter(pos => 
-            !(pos.normalizedEnd <= highlightStart || pos.normalizedStart >= highlightEnd)
-        );
-    
+        // 将标准化位置映射回原始文本位置
+        const mapNormalizedToOriginal = (normalizedPos) => {
+            let originalPos = 0;
+            let normalizedCount = 0;
+            
+            for (let i = 0; i < originalText.length; i++) {
+                const char = originalText[i];
+                const normalizedChar = char.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ');
+                
+                if (normalizedCount === normalizedPos) {
+                    return originalPos;
+                }
+                
+                if (normalizedChar && normalizedChar !== ' ' || (normalizedChar === ' ' && position.fullText[normalizedCount] === ' ')) {
+                    normalizedCount++;
+                }
+                originalPos++;
+            }
+            return originalPos;
+        };
+        
+        const originalStart = mapNormalizedToOriginal(highlightStart);
+        const originalEnd = mapNormalizedToOriginal(highlightEnd);
+        
+        console.log('Mapped positions - original:', originalStart, 'to', originalEnd);
+        
+        // 找到受影响的节点
+        let currentPos = 0;
+        const affectedNodes = [];
+        
+        nodeMap.forEach(nodeInfo => {
+            const nodeStart = nodeInfo.start;
+            const nodeEnd = nodeInfo.end;
+            
+            // 检查是否与高亮区域重叠
+            if (!(nodeEnd <= originalStart || nodeStart >= originalEnd)) {
+                const overlapStart = Math.max(nodeStart, originalStart);
+                const overlapEnd = Math.min(nodeEnd, originalEnd);
+                
+                affectedNodes.push({
+                    ...nodeInfo,
+                    overlapStart: overlapStart - nodeStart,
+                    overlapEnd: overlapEnd - nodeStart
+                });
+            }
+        });
+        
         console.log('Affected nodes:', affectedNodes);
-    
+        
         if (affectedNodes.length === 0) {
             return cleanValue;
         }
-    
+        
         // 应用高亮到受影响的节点
         const newValue = cleanValue.map((node, nodeIndex) => {
-            const nodePos = nodePositions.find(pos => pos.nodeIndex === nodeIndex);
-            if (!nodePos || !affectedNodes.includes(nodePos)) {
+            const affectedNode = affectedNodes.find(n => n.nodeIndex === nodeIndex);
+            if (!affectedNode) {
                 return node;
             }
-    
-            // 计算在当前节点中的高亮范围
-            const nodeStart = Math.max(0, highlightStart - nodePos.normalizedStart);
-            const nodeEnd = Math.min(nodePos.normalizedText.length, highlightEnd - nodePos.normalizedStart);
-    
-            console.log(`Node ${nodeIndex}: highlighting from ${nodeStart} to ${nodeEnd} in "${nodePos.normalizedText}"`);
-    
-            if (nodeStart >= nodeEnd) {
-                return node;
-            }
-    
-            // 改进的文本分割逻辑，确保精确的边界控制
-            const originalText = nodePos.originalText;
             
-            // 更精确的位置映射
-            let originalStart = 0;
-            let originalEnd = originalText.length;
+            const { nodeText, overlapStart, overlapEnd } = affectedNode;
             
-            if (nodeStart > 0 || nodeEnd < nodePos.normalizedText.length) {
-                // 尝试在原文中找到更精确的匹配位置
-                const targetText = nodePos.normalizedText.substring(nodeStart, nodeEnd);
-                const normalizedOriginal = originalText.replace(/\s+/g, ' ').trim().toLowerCase();
-                
-                // 在标准化的原文中查找目标文本
-                const targetIndex = normalizedOriginal.indexOf(targetText);
-                
-                if (targetIndex !== -1) {
-                    // 找到精确匹配，映射回原文位置
-                    let charCount = 0;
-                    let mappedStart = -1;
-                    let mappedEnd = -1;
-                    
-                    for (let i = 0; i < originalText.length; i++) {
-                        const normalizedChar = originalText[i].toLowerCase();
-                        if (normalizedChar.match(/\s/)) {
-                            if (charCount === targetIndex && mappedStart === -1) {
-                                mappedStart = i;
-                            }
-                            continue;
-                        }
-                        
-                        if (charCount === targetIndex && mappedStart === -1) {
-                            mappedStart = i;
-                        }
-                        if (charCount === targetIndex + targetText.length - 1 && mappedEnd === -1) {
-                            mappedEnd = i + 1;
-                            break;
-                        }
-                        charCount++;
-                    }
-                    
-                    if (mappedStart !== -1 && mappedEnd !== -1) {
-                        originalStart = mappedStart;
-                        originalEnd = mappedEnd;
-                    }
-                } else {
-                    // 如果找不到精确匹配，使用比例估算，但更保守
-                    const startRatio = nodeStart / nodePos.normalizedText.length;
-                    const endRatio = nodeEnd / nodePos.normalizedText.length;
-                    
-                    originalStart = Math.floor(originalText.length * startRatio);
-                    originalEnd = Math.ceil(originalText.length * endRatio);
-                    
-                    // 额外的边界检查，防止超出预期范围
-                    const maxLength = Math.min(componentContent.length, originalText.length);
-                    originalEnd = Math.min(originalEnd, originalStart + maxLength);
-                }
-            }
+            // 确保边界有效
+            const validStart = Math.max(0, Math.min(overlapStart, nodeText.length));
+            const validEnd = Math.max(validStart, Math.min(overlapEnd, nodeText.length));
             
-            // 确保边界有效且合理
-            originalStart = Math.max(0, Math.min(originalStart, originalText.length));
-            originalEnd = Math.max(originalStart, Math.min(originalEnd, originalText.length));
+            console.log(`Node ${nodeIndex}: highlighting from ${validStart} to ${validEnd} in "${nodeText}"`);
             
-            // 额外检查：确保高亮长度不会明显超过component内容长度
-            const highlightLength = originalEnd - originalStart;
-            const componentLength = componentContent.replace(/\s+/g, ' ').trim().length;
+            // 分割文本
+            const beforeText = nodeText.substring(0, validStart);
+            const highlightText = nodeText.substring(validStart, validEnd);
+            const afterText = nodeText.substring(validEnd);
             
-            if (highlightLength > componentLength * 1.2) { // 允许20%的误差
-                originalEnd = originalStart + Math.min(highlightLength, Math.ceil(componentLength * 1.1));
-            }
-    
-            console.log(`Mapping to original text positions: ${originalStart} to ${originalEnd} (length: ${originalEnd - originalStart})`);
-    
-            // 分割文本并应用高亮，保留现有的dimension属性
-            const beforeText = originalText.substring(0, originalStart);
-            const highlightText = originalText.substring(originalStart, originalEnd);
-            const afterText = originalText.substring(originalEnd);
-    
             const newChildren = [];
             
-            // 处理高亮前的文本
-            if (beforeText) {
-                // 查找现有的child，保留其dimension属性
+            // 保留现有属性的辅助函数
+            const preserveExistingProps = (text) => {
                 const existingChild = node.children.find(child => 
-                    child.text && child.text.includes(beforeText)
+                    child.text && child.text.includes(text)
                 );
+                return existingChild ? {
+                    hasDimensions: existingChild.hasDimensions,
+                    linkedIntents: existingChild.linkedIntents,
+                    componentId: existingChild.componentId
+                } : {};
+            };
+            
+            if (beforeText) {
                 newChildren.push({ 
                     text: beforeText,
-                    // 保留现有的dimension属性
-                    ...(existingChild ? {
-                        hasDimensions: existingChild.hasDimensions,
-                        linkedIntents: existingChild.linkedIntents,
-                        componentId: existingChild.componentId
-                    } : {})
+                    ...preserveExistingProps(beforeText)
                 });
             }
             
-            // 处理高亮文本
             if (highlightText) {
-                // 查找现有的child，保留其dimension属性并添加高亮
-                const existingChild = node.children.find(child => 
-                    child.text && child.text.includes(highlightText)
-                );
+                // 判断是否为第一个文本节点（用于显示dimension圆圈）
+                const isFirstTextNode = validStart === 0 && affectedNode === affectedNodes[0];
                 
                 newChildren.push({ 
                     text: highlightText, 
                     highlight: true, 
                     componentId: componentId,
-                    // 保留或设置dimension属性
-                    hasDimensions: existingChild?.hasDimensions || (linkedIntents.length > 0),
-                    linkedIntents: existingChild?.linkedIntents || linkedIntents
+                    hasDimensions: linkedIntents.length > 0,
+                    linkedIntents: linkedIntents,
+                    isFirstTextNode: isFirstTextNode,
+                    ...preserveExistingProps(highlightText)
                 });
             }
             
-            // 处理高亮后的文本
             if (afterText) {
-                // 查找现有的child，保留其dimension属性
-                const existingChild = node.children.find(child => 
-                    child.text && child.text.includes(afterText)
-                );
                 newChildren.push({ 
                     text: afterText,
-                    // 保留现有的dimension属性
-                    ...(existingChild ? {
-                        hasDimensions: existingChild.hasDimensions,
-                        linkedIntents: existingChild.linkedIntents,
-                        componentId: existingChild.componentId
-                    } : {})
+                    ...preserveExistingProps(afterText)
                 });
             }
-    
+            
             return {
                 ...node,
-                children: newChildren.length > 0 ? newChildren : [{ text: originalText }]
+                children: newChildren.length > 0 ? newChildren : [{ text: nodeText }]
             };
         });
-    
+        
         console.log('Applied highlighting, returning new value');
         return newValue;
     };
@@ -1040,36 +997,53 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
         return editorValue;
     }
 
-    // 构建位置映射
-    let currentNormalizedPos = 0;
-    let nodePositions = [];
-    
-    editorValue.forEach((node, nodeIndex) => {
-        const nodeText = getNodeText(null, node);
-        const normalizedNodeText = nodeText.replace(/\s+/g, ' ').trim().toLowerCase();
-        
-        nodePositions.push({
-            nodeIndex,
-            originalText: nodeText,
-            normalizedText: normalizedNodeText,
-            normalizedStart: currentNormalizedPos,
-            normalizedEnd: currentNormalizedPos + normalizedNodeText.length,
-            node
-        });
-        
-        currentNormalizedPos += normalizedNodeText.length;
-        if (nodeIndex < editorValue.length - 1) {
-            currentNormalizedPos += 1;
-        }
-    });
-
-    // 找到需要添加dimension的节点
+    // 使用新的精确位置映射
+    const { nodeMap, originalText } = position;
     const highlightStart = position.start;
     const highlightEnd = position.end;
     
-    const affectedNodes = nodePositions.filter(pos => 
-        !(pos.normalizedEnd <= highlightStart || pos.normalizedStart >= highlightEnd)
-    );
+    // 将标准化位置映射回原始文本位置
+    const mapNormalizedToOriginal = (normalizedPos) => {
+        let originalPos = 0;
+        let normalizedCount = 0;
+        
+        for (let i = 0; i < originalText.length; i++) {
+            const char = originalText[i];
+            const normalizedChar = char.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ');
+            
+            if (normalizedCount === normalizedPos) {
+                return originalPos;
+            }
+            
+            if (normalizedChar && normalizedChar !== ' ' || (normalizedChar === ' ' && position.fullText[normalizedCount] === ' ')) {
+                normalizedCount++;
+            }
+            originalPos++;
+        }
+        return originalPos;
+    };
+    
+    const originalStart = mapNormalizedToOriginal(highlightStart);
+    const originalEnd = mapNormalizedToOriginal(highlightEnd);
+    
+    // 找到受影响的节点
+    const affectedNodes = [];
+    
+    nodeMap.forEach(nodeInfo => {
+        const nodeStart = nodeInfo.start;
+        const nodeEnd = nodeInfo.end;
+        
+        if (!(nodeEnd <= originalStart || nodeStart >= originalEnd)) {
+            const overlapStart = Math.max(nodeStart, originalStart);
+            const overlapEnd = Math.min(nodeEnd, originalEnd);
+            
+            affectedNodes.push({
+                ...nodeInfo,
+                overlapStart: overlapStart - nodeStart,
+                overlapEnd: overlapEnd - nodeStart
+            });
+        }
+    });
 
     if (affectedNodes.length === 0) {
         return editorValue;
@@ -1077,48 +1051,36 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
 
     // 为受影响的节点添加dimension标记
     const newValue = editorValue.map((node, nodeIndex) => {
-        const nodePos = nodePositions.find(pos => pos.nodeIndex === nodeIndex);
-        if (!nodePos || !affectedNodes.includes(nodePos)) {
+        const affectedNode = affectedNodes.find(n => n.nodeIndex === nodeIndex);
+        if (!affectedNode) {
             return node;
         }
-
-        const nodeStart = Math.max(0, highlightStart - nodePos.normalizedStart);
-        const nodeEnd = Math.min(nodePos.normalizedText.length, highlightEnd - nodePos.normalizedStart);
-
-        if (nodeStart >= nodeEnd) {
-            return node;
-        }
-
-        const originalText = nodePos.originalText;
-        let originalStart = 0;
-        let originalEnd = originalText.length;
-
-        if (nodeStart > 0 || nodeEnd < nodePos.normalizedText.length) {
-            const startRatio = nodeStart / nodePos.normalizedText.length;
-            const endRatio = nodeEnd / nodePos.normalizedText.length;
-            
-            originalStart = Math.floor(originalText.length * startRatio);
-            originalEnd = Math.ceil(originalText.length * endRatio);
-        }
-
-        originalStart = Math.max(0, Math.min(originalStart, originalText.length));
-        originalEnd = Math.max(originalStart, Math.min(originalEnd, originalText.length));
-
+        
+        const { nodeText, overlapStart, overlapEnd } = affectedNode;
+        
+        // 确保边界有效
+        const validStart = Math.max(0, Math.min(overlapStart, nodeText.length));
+        const validEnd = Math.max(validStart, Math.min(overlapEnd, nodeText.length));
+        
         // 分割文本并添加dimension标记
-        const beforeText = originalText.substring(0, originalStart);
-        const dimensionText = originalText.substring(originalStart, originalEnd);
-        const afterText = originalText.substring(originalEnd);
+        const beforeText = nodeText.substring(0, validStart);
+        const dimensionText = nodeText.substring(validStart, validEnd);
+        const afterText = nodeText.substring(validEnd);
 
         const newChildren = [];
         if (beforeText) {
             newChildren.push({ text: beforeText });
         }
         if (dimensionText) {
+            // 判断是否为第一个文本节点（用于显示dimension圆圈）
+            const isFirstTextNode = validStart === 0 && affectedNode === affectedNodes[0];
+            
             newChildren.push({ 
                 text: dimensionText,
                 hasDimensions: true,
                 componentId: componentId,
-                linkedIntents: linkedIntents
+                linkedIntents: linkedIntents,
+                isFirstTextNode: isFirstTextNode
             });
         }
         if (afterText) {
@@ -1127,152 +1089,376 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
 
         return {
             ...node,
-            children: newChildren.length > 0 ? newChildren : [{ text: originalText }]
+            children: newChildren.length > 0 ? newChildren : [{ text: nodeText }]
         };
     });
 
     return newValue;
 };
-// 4. 修改后的renderLeaf函数 - 始终显示dimension圆圈
-const renderLeaf = ({ attributes, children, leaf }) => {
-    let element = children;
+    // Color palette for dimension circles
+    const colorPalette = ['#ff7875', '#ff9c6e', '#ffc069', '#d3f261', '#ffd666', '#fff566', '#95de64', '#5cdbd3', '#b37feb', '#ff85c0','#ffa39e','#ffbb96','#ffd591','#eaff8f','#ffe58f','#fffb8f','#b7eb8f','#87e8de','#d3adf7','#ffadd2'];
     
-    if (leaf.bold) {
-        element = <strong>{element}</strong>;
-    }
-    if (leaf.italic) {
-        element = <em>{element}</em>;
-    }
-    if (leaf.underline) {
-        element = <u>{element}</u>;
-    }
+    // Track dimension-to-color mapping to prevent duplicates
+    const dimensionColorMapRef = useRef(new Map());
     
-    // 检查是否有dimension标记，无论是否高亮都显示圆圈
-    const hasDimensions = leaf.hasDimensions && leaf.linkedIntents && leaf.linkedIntents.length > 0;
-    const isHighlighted = leaf.highlight;
-    
-    if (hasDimensions || isHighlighted) {
-        // 获取dimension信息
-        let dimensions = [];
-        if (leaf.linkedIntents) {
-            dimensions = leaf.linkedIntents;
-        } else if (leaf.componentId) {
-            // 如果没有直接的linkedIntents，从combinedResults中查找
-            const combinedResult = combinedResults.find(result => result.id === leaf.componentId);
-            dimensions = combinedResult?.linkedIntents || [];
+    // Helper function to get unique dimension color from palette
+    const getDimensionColor = (dimension) => {
+        if (dimensionColorMapRef.current.has(dimension)) {
+            return dimensionColorMapRef.current.get(dimension);
         }
         
-        // 根据是否高亮设置不同的文本样式
-        const textStyle = isHighlighted ? {
-            backgroundColor: '#fff3cd',
-            border: '1px solid #ffc107',
-            borderRadius: '2px',
-            padding: '1px 2px',
-            cursor: 'pointer',
-            display: 'inline-block'
-        } : {
-            cursor: 'pointer',
-            display: 'inline-block'
-        };
+        const usedColors = new Set(dimensionColorMapRef.current.values());
+        const availableColor = colorPalette.find(color => !usedColors.has(color)) || colorPalette[0];
         
-        element = (
-            <span style={{ position: 'relative', display: 'inline-block' }}>
-                {/* 始终显示dimension圆圈 */}
-                {dimensions.length > 0 && (
-                    <div style={{
-                        position: 'absolute',
-                        top: '-12px',
-                        left: '0',
-                        display: 'flex',
-                        gap: '4px',
-                        zIndex: 10,
-                        flexWrap: 'wrap'
-                    }}>
-                        {dimensions.map((intent, index) => (
-                            <Button
-                                key={`${leaf.componentId}-${index}`}
-                                size="small"
-                                shape="circle"
-                                style={{
-                                    width: '10px',
-                                    height: '10px',
-                                    minWidth: '10px',
-                                    padding: '0',
-                                    fontSize: '8px',
-                                    backgroundColor: getDimensionColor(intent.dimension),
-                                    border: 'none',
-                                    cursor: 'pointer'
-                                }}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDimensionClick(intent, leaf.componentId);
-                                }}
-                                title={intent.dimension}
-                            />
-                        ))}
-                    </div>
-                )}
-                
-                <span
-                    style={textStyle}
-                    onClick={(e) => handleHighlightClick(e, leaf.componentId)}
-                >
-                    {element}
+        dimensionColorMapRef.current.set(dimension, availableColor);
+        return availableColor;
+    };
+
+    // 4. 修改后的renderLeaf函数 - 始终显示dimension圆圈
+    const renderLeaf = ({ attributes, children, leaf }) => {
+        let element = children;
+        
+        if (leaf.bold) {
+            element = <strong>{element}</strong>;
+        }
+        if (leaf.italic) {
+            element = <em>{element}</em>;
+        }
+        if (leaf.underline) {
+            element = <u>{element}</u>;
+        }
+        
+        // 检查是否有dimension标记，无论是否高亮都显示圆圈
+        const hasDimensions = leaf.hasDimensions && leaf.linkedIntents && leaf.linkedIntents.length > 0;
+        const isHighlighted = leaf.highlight;
+        
+        if (hasDimensions || isHighlighted) {
+            // 获取dimension信息
+            let dimensions = [];
+            if (leaf.linkedIntents) {
+                dimensions = leaf.linkedIntents;
+            } else if (leaf.componentId) {
+                // 如果没有直接的linkedIntents，从combinedResults中查找
+                const combinedResult = combinedResults.find(result => result.id === leaf.componentId);
+                dimensions = combinedResult?.linkedIntents || [];
+            }
+            
+            // 根据是否高亮设置不同的文本样式
+            const textStyle = isHighlighted ? {
+                backgroundColor: '#fff3cd',
+                border: '1px solid #ffc107',
+                borderRadius: '2px',
+                padding: '1px 2px',
+                cursor: 'pointer'
+            } : {
+                cursor: 'pointer'
+            };
+            
+            element = (
+                <span style={{ position: 'relative' }}>
+                    {/* 始终显示dimension圆圈 */}
+                    {dimensions.length > 0 && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '-12px',
+                            left: '0',
+                            display: 'flex',
+                            gap: '4px',
+                            zIndex: 10,
+                            flexWrap: 'wrap'
+                        }}>
+                            {dimensions.map((intent, index) => (
+                                <Button
+                                    key={`${leaf.componentId}-${index}`}
+                                    size="small"
+                                    shape="circle"
+                                    style={{
+                                        width: '10px',
+                                        height: '10px',
+                                        minWidth: '10px',
+                                        padding: '0',
+                                        fontSize: '8px',
+                                        backgroundColor: getDimensionColor(intent.dimension),
+                                        border: 'none',
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDimensionClick(intent, leaf.componentId);
+                                    }}
+                                    title={`${intent.dimension}: ${intent.current_value}`}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    
+                    <span
+                        {...attributes}
+                        style={textStyle}
+                        onClick={isHighlighted ? (e) => handleHighlightClick(e, leaf.componentId) : undefined}
+                    >
+                        {element}
+                    </span>
                 </span>
-            </span>
+            );
+        }
+        
+        return <span {...attributes}>{element}</span>;
+    };
+
+
+
+
+    const handleDimensionClick = (intent, componentId) => {
+        console.log('Dimension clicked:', intent.dimension, 'for component:', componentId);
+        
+        // 查找对应的组件
+        const component = components.find(c => c.id === componentId);
+        if (!component) {
+            console.log('Component not found:', componentId);
+            return;
+        }
+
+        // 检查当前组件是否已经被选中和高亮
+        const isCurrentlySelected = selectedComponentId === componentId;
+        const isCurrentlyHighlighted = value.some(node => 
+            node.children.some(child => 
+                child.highlight && child.componentId === componentId
+            )
         );
-    }
+
+        // 如果已经选中且高亮，则不执行任何操作
+        if (isCurrentlySelected && isCurrentlyHighlighted) {
+            console.log('Component already selected and highlighted, no action needed');
+            return;
+        }
+
+        // 选中对应的组件
+        console.log('Selecting component:', component.id);
+        setSelectedComponentId(component.id);
+        
+        // 高亮对应的内容
+        console.log('Highlighting component content:', component.content);
+        applyHighlighting(component.content, component.id);
+        
+        // 可选：显示提示信息
+        message.info(`Selected dimension: ${intent.dimension}`);
+    };
+
+    // Handle applying preview content to selected component
+    const handleApplyToSelectedComponent = (intentSelected) => {
+        if (!selectedComponentId || !previewContent) {
+            message.warning('No component selected or no preview content available');
+            return;
+        }
+
+        // Find the selected component
+        const selectedComponent = components.find(comp => comp.id === selectedComponentId);
+        if (!selectedComponent) {
+            message.error('Selected component not found');
+            return;
+        }
+
+        console.log('Applying preview content:', previewContent);
+        console.log('To component:', selectedComponent);
+        console.log('With intent selected:', intentSelected);
+
+        // Find the component text in the current editor value
+        const position = findTextInEditor(selectedComponent.content, value);
+        if (!position) {
+            message.error('Could not locate component in editor');
+            return;
+        }
+
+        // Simply replace the component content using a more direct approach
+        const combinedResult = combinedResults.find(result => result.id === selectedComponentId);
+        let linkedIntents = combinedResult?.linkedIntents || [];
+        
+        // Update linkedIntents with new intentSelected values if provided
+        if (intentSelected) {
+            linkedIntents = linkedIntents.map(intent => 
+                intent.dimension === intentSelected.dimension 
+                    ? {
+                        ...intent,
+                        current_value: intentSelected.current_value,
+                        other_values: intentSelected.other_values
+                    }
+                    : intent
+            );
+        }
+        
+        // Update the editor value directly
+        const newValue = value.map(node => {
+            const nodeText = getNodeText(null, node);
+            if (nodeText.includes(selectedComponent.content)) {
+                // Replace the component content in this node
+                const updatedText = nodeText.replace(selectedComponent.content, previewContent);
+                return {
+                    ...node,
+                    children: [{
+                        text: updatedText,
+                        highlight: true,
+                        componentId: selectedComponentId,
+                        hasDimensions: linkedIntents.length > 0,
+                        linkedIntents: linkedIntents
+                    }]
+                };
+            }
+            return node;
+        });
+        
+        setValue(newValue);
+        setEditorKey(prev => prev + 1);
+
+        // Update component states
+        setComponents(prevComponents => 
+            prevComponents.map(comp => 
+                comp.id === selectedComponentId ? { ...comp, content: previewContent } : comp
+            )
+        );
+
+        // Update combinedResults with new content and updated linkedIntents
+        setCombinedResults(prevResults => 
+            prevResults.map(comp => 
+                comp.id === selectedComponentId 
+                    ? { 
+                        ...comp, 
+                        content: previewContent,
+                        linkedIntents: linkedIntents
+                    } 
+                    : comp
+            )
+        );
+
+        // Update originalText
+        const updatedText = originalText.replace(selectedComponent.content, previewContent);
+        setOriginalText(updatedText);
+        
+        // Save updated content to sessionData
+        const saveDraft = async () => {
+            try {
+                await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
+                    content: updatedText,
+                });
+                console.log('Draft saved to sessionData');
+            } catch (error) {
+                console.error('Error saving draft to sessionData:', error);
+            }
+        };
+        saveDraft();
+        
+        // Clear preview content
+        setPreviewContent('');
+        
+        message.success('Component content updated successfully');
+    };
+
+    // Add state update logic and debugging logs to handleRadioChange
+    const handleRadioChange = async (dimension, newValue) => {
+        try {
+            console.log('Radio change detected:', { dimension, newValue });
     
-    return <span {...attributes}>{element}</span>;
-};
-
-
-    // Add these helper functions before the return statement
-const getDimensionColor = (dimension) => {
-    // Generate consistent colors for each dimension
-    const colors = [
-        '#ff4d4f', '#1890ff', '#52c41a', '#faad14', 
-        '#722ed1', '#eb2f96', '#13c2c2', '#fa8c16'
-    ];
-    const hash = dimension.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
-};
-
-const handleDimensionClick = (intent, componentId) => {
-    console.log('Dimension clicked:', intent.dimension, 'for component:', componentId);
+            const selectedComponent = combinedResults.find(component => component.id === selectedComponentId);
+            if (!selectedComponent) {
+                console.error('No selected component found');
+                return;
+            }
     
-    // 查找对应的组件
-    const component = components.find(c => c.id === componentId);
-    if (!component) {
-        console.log('Component not found:', componentId);
-        return;
-    }
-
-    // 检查当前组件是否已经被选中和高亮
-    const isCurrentlySelected = selectedComponentId === componentId;
-    const isCurrentlyHighlighted = value.some(node => 
-        node.children.some(child => 
-            child.highlight && child.componentId === componentId
-        )
-    );
-
-    // 如果已经选中且高亮，则不执行任何操作
-    if (isCurrentlySelected && isCurrentlyHighlighted) {
-        console.log('Component already selected and highlighted, no action needed');
-        return;
-    }
-
-    // 选中对应的组件
-    console.log('Selecting component:', component.id);
-    setSelectedComponentId(component.id);
+            // Find the intent being changed
+            const targetIntent = selectedComponent.linkedIntents.find(intent => intent.dimension === dimension);
+            if (!targetIntent) {
+                console.error('Target intent not found');
+                return;
+            }
     
-    // 高亮对应的内容
-    console.log('Highlighting component content:', component.content);
-    applyHighlighting(component.content, component.id);
+            // Construct INTENT_SELECTED with the new value as current_value
+            // and all other options (including the previous current_value) as other_values
+            const allValues = [targetIntent.current_value, ...targetIntent.other_values];
+            const otherValues = allValues.filter(value => value !== newValue);
     
-    // 可选：显示提示信息
-    message.info(`Selected dimension: ${intent.dimension}`);
-};
+            const intentSelected = {
+                dimension,
+                current_value: newValue,
+                other_values: otherValues
+            };
+    
+            // Construct INTENT_OTHERS from other intents of the same component
+            const intentOthers = selectedComponent.linkedIntents
+                .filter(intent => intent.dimension !== dimension)
+                .map(intent => ({
+                    dimension: intent.dimension,
+                    current_value: intent.current_value
+                }));
+    
+            console.log('INTENT_SELECTED:', intentSelected);
+            console.log('INTENT_OTHERS:', intentOthers);
+    
+            // Update state to reflect the new selection
+            setCombinedResults(prevResults => {
+                return prevResults.map(component => {
+                    if (component.id === selectedComponentId) {
+                        return {
+                            ...component,
+                            linkedIntents: component.linkedIntents.map(intent => {
+                                if (intent.dimension === dimension) {
+                                    // Preserve the original order by swapping values instead of reordering
+                                    const newOtherValues = [...intent.other_values];
+                                    const oldCurrentValue = intent.current_value;
+                                    
+                                    // Find the index of the new value in other_values
+                                    const newValueIndex = newOtherValues.indexOf(newValue);
+                                    
+                                    if (newValueIndex !== -1) {
+                                        // Replace the new value with the old current value
+                                        newOtherValues[newValueIndex] = oldCurrentValue;
+                                    } else {
+                                        // If new value is not in other_values, add old current value to the end
+                                        newOtherValues.push(oldCurrentValue);
+                                    }
+                                    
+                                    return {
+                                        ...intent,
+                                        current_value: newValue,
+                                        other_values: newOtherValues
+                                    };
+                                }
+                                return intent;
+                            })
+                        };
+                    }
+                    return component;
+                });
+            });
+    
+            // Call the API with the correct data structure
+            const response = await axios.post('http://localhost:3001/intent-change-rewriter', {
+                userName: globalUsername,
+                taskId: globalTaskId,
+                userTask,
+                factorChoices: selectedComponent.linkedIntents,
+                draftLatest: originalText,
+                componentCurrent: selectedComponent.content,
+                intentSelected,
+                intentOthers
+            });
+    
+            if (response.data && response.data.component_variations) {
+                console.log('Component variations received:', response.data.component_variations);
+                // Find the content that matches the selected intent value
+                const matchingVariation = response.data.component_variations.find(
+                    variation => variation.intent_value === newValue
+                );
+                console.log('Matching variation:', matchingVariation);
+                if (matchingVariation) {
+                    setPreviewContent(matchingVariation.content);
+                }
+                // Handle the response as needed
+            }
+        } catch (error) {
+            console.error('Error calling /intent-change-rewriter:', error);
+            message.error('Failed to process intent change');
+        }
+    };
 
     // Handle keyboard shortcuts
     const handleKeyDown = (event) => {
@@ -1366,12 +1552,32 @@ const handleDimensionClick = (intent, componentId) => {
              // 初始化所有dimension标记
             setTimeout(() => {
                 if (combinedResult.length > 0) {
-                    initializeAllDimensions();
+                    initializeAllDimensionsWithResults(combinedResult);
                 }
             }, 100);
         } catch (error) {
             console.error('Error processing combined result:', error);
         }
+    };
+
+    // 新增：使用传入的results初始化dimension标记
+    const initializeAllDimensionsWithResults = (results) => {
+        if (!results || results.length === 0) {
+            console.log('No results provided');
+            return;
+        }
+
+        let newValue = [...value];
+        
+        // 为每个component添加dimension标记
+        results.forEach(component => {
+            if (component.linkedIntents && component.linkedIntents.length > 0) {
+                newValue = addDimensionsToValue(newValue, component.content, component.id, component.linkedIntents);
+            }
+        });
+        
+        setValue(newValue);
+        setEditorKey(prev => prev + 1);
     };
 
     return (
@@ -1389,7 +1595,6 @@ const handleDimensionClick = (intent, componentId) => {
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <Button>Regenerate Draft</Button>
                     <Button
-                        type="primary"
                         onClick={handleSaveDraft}
                     >
                         Save Draft
@@ -1400,6 +1605,7 @@ const handleDimensionClick = (intent, componentId) => {
                     <Button onClick={removeAllHighlighting}>
                         Clear Highlighting
                     </Button>
+                    <Button type="primary">Generate Anchors</Button>
                 </div>
             </div>
             
@@ -1412,6 +1618,7 @@ const handleDimensionClick = (intent, componentId) => {
                 bodyStyle={{
                     padding: 0,
                     height: '100%',
+                    overflow: 'auto'
                 }}
             >
                 {contentLoaded ? (
@@ -1504,6 +1711,7 @@ const handleDimensionClick = (intent, componentId) => {
                                                     padding: '12px',
                                                     backgroundColor: selectedComponentId === component.id ? '#e6f7ff' : 'white',
                                                     border: selectedComponentId === component.id ? '1px solid #1890ff' : '1px solid #e8e8e8',
+                                                    borderLeft: selectedComponentId === component.id ? '4px solid #1890ff' : '1px solid #e8e8e8',
                                                     borderRadius: '4px',
                                                     transition: 'all 0.2s',
                                                 }}
@@ -1514,7 +1722,7 @@ const handleDimensionClick = (intent, componentId) => {
                                                     alignItems: 'center',
                                                     marginBottom: '6px'
                                                 }}>
-                                                    <Button 
+                                                    {/* <Button 
                                                         size="small" 
                                                         type={selectedComponentId === component.id ? 'primary' : 'default'}
                                                         style={{ 
@@ -1526,7 +1734,7 @@ const handleDimensionClick = (intent, componentId) => {
                                                         }}
                                                     >
                                                         {index + 1}
-                                                    </Button>
+                                                    </Button> */}
                                                     <div style={{ 
                                                         fontSize: '12px',
                                                         fontWeight: 'bold',
@@ -1556,30 +1764,70 @@ const handleDimensionClick = (intent, componentId) => {
                             </div>
                         </Col>
                     </Row>
-                    <Row style={{ height: '20%' }}>
+                    <Row style={{ height: '20%', overflow: 'auto' ,width:'100%'}}>
                         <Col span={24}>
-                        <div style={{padding: '16px'}}>
-                            <p style={{fontWeight: 'bold', fontSize: '14px'}}>Intents</p> 
-                            <Button>Apply to Selected Component</Button>
-                            <Button>Cancel</Button>
+                        <div style={{padding: '16px', display: 'flex'}}>
+                            <div style={{fontWeight: 'bold', fontSize: '16px', marginRight: '16px'}}>Intents</div> 
+                            <Button 
+                                size="small" 
+                                color="primary" 
+                                variant="outlined" 
+                                style={{marginRight:'16px'}}
+                                onClick={handleApplyToSelectedComponent}
+                                disabled={!selectedComponentId || !previewContent}
+                            >
+                                Apply to Selected Component
+                            </Button>
+                            
                         </div>
-                        <div className='intentCards'>
+                        <div className='intentModificationPreview' style={{padding:'8px',margin:'0 16px', width:'100%', border:'1px solid #f0f0f0', backgroundColor:'#fafafa', borderRadius:'8px'}}>
+                            <p style={{fontWeight: '600'}}>Modification Preview:</p>
+                            <span className="intentModificationPreviewContent">{previewContent}</span>
+
+                        </div>
+                        <div className='intentCards' style={{padding:'8px 16px'}}>
                             <Flex wrap gap="small">
-                                {Array.from({ length: 5 }, (_, i) => (
-                                 <Card title="Card title" key={i}>
-                                 <Radio.Group
-                                     style={{display: 'flex',flexDirection: 'column',gap: 8}}
-                                     value={value}
-                                     options={[
-                                         { value: 1, label: 'Option A' },
-                                         { value: 2, label: 'Option B' },
-                                         { value: 3, label: 'Option C' }
-                                     ]}
-                                     ></Radio.Group>
-                                 </Card>
-                                ))}
+                                {selectedComponentId && combinedResults.length > 0 ? (
+                                    combinedResults
+                                        .find(component => component.id === selectedComponentId)?.linkedIntents
+                                        .map((intent, i) => (
+                                            <Card 
+                                                title={
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        
+                                                        {intent.dimension}
+                                                    </div>
+                                                }
+                                                key={i}
+                                                style={{ borderTop: `6px solid ${getDimensionColor(intent.dimension)}` }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // 阻止卡片点击事件影响其他组件
+                                                }}
+                                            >
+                                                <Radio.Group
+                                                    style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                                                    value={intent.current_value}
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRadioChange(intent.dimension, e.target.value);
+                                                    }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                    }}
+                                                >
+                                                    <Radio value={intent.current_value}>{intent.current_value}</Radio>
+                                                    {intent.other_values.map((value, index) => (
+                                                        <Radio key={index} value={value}>{value}</Radio>
+                                                    ))}
+                                                </Radio.Group>
+                                            </Card>
+                                        ))
+                                ) : (
+                                    <div style={{ color: '#999', fontStyle: 'italic', textAlign: 'center', marginTop: '20px', fontSize: '13px' }}>
+                                        No intents available. Select a component to view its intents.
+                                    </div>
+                                )}
                             </Flex>
-                           
                         </div>
                         </Col>
                     </Row>
