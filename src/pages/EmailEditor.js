@@ -323,9 +323,11 @@ const EmailEditor = () => {
     const [originalText, setOriginalText] = useState('');
     // Add this state near other useState declarations
     const [combinedResults, setCombinedResults] = useState([]);
+    
 
     // Load draft content on component mount
     useEffect(() => {
+        
         const fetchDraft = async () => {
             try {
                 const response = await axios.get(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`);
@@ -367,6 +369,10 @@ const EmailEditor = () => {
 
         if (taskId) {
             fetchDraft();
+            if (combinedResults.length > 0 && value.length > 0) {
+                // Apply dimension markers to all components
+                applyAllDimensions();
+            }
         } else {
             setValue([
                 {
@@ -377,16 +383,35 @@ const EmailEditor = () => {
             setContentLoaded(true);
             setLoading(false);
         }
-    }, [taskId, globalTaskId]);
+    }, [taskId, globalTaskId, combinedResults]);
 
     let commonComponents = [];
     let linkResults = null;
     let combinedResult = null;
 
+        // 1. 新增：清除所有标记的函数
+    const clearAllMarkers = () => {
+        const cleanValue = value.map(node => ({
+            ...node,
+            children: node.children.map(child => {
+                if (typeof child === 'string') {
+                    return child;
+                }
+                // 移除所有标记，只保留文本和基本格式
+                const { highlight, componentId, hasDimensions, linkedIntents, ...cleanChild } = child;
+                return cleanChild;
+            })
+        }));
+        
+        setValue(cleanValue);
+        setEditorKey(prev => prev + 1);
+    };
     // Extract components using the component extractor
     const handleExtractComponents = async () => {
         try {
             setLoading(true);
+            // 清除之前的所有dimension和highlight标记
+            clearAllMarkers();
             const response = await axios.post('http://localhost:3001/component-extractor', {
                 taskId: globalTaskId,
                 userName: globalUsername,
@@ -407,6 +432,8 @@ const EmailEditor = () => {
             }
 
             setComponents(extractedComponents);
+            setSelectedComponentId(null); // 清除选中状态
+            setCombinedResults([]); // 清除之前的combined results
             message.success(`Extracted ${extractedComponents.length} components`);
 
             commonComponents = extractedComponents;
@@ -497,6 +524,8 @@ const EmailEditor = () => {
         }
         
         console.log('Found exact match at index:', index);
+        // 进一步限制匹配长度，确保不会超出预期边界
+        const actualEnd = Math.min(index + normalizedSearch.length, normalizedFull.length);
         return {
             start: index,
             end: index + normalizedSearch.length,
@@ -506,28 +535,35 @@ const EmailEditor = () => {
         };
     };
 
-    // 改进的高亮应用函数，支持跨段落高亮
     const applyHighlightingToValue = (editorValue, componentContent, componentId) => {
         console.log('Applying highlighting for component:', componentId);
         console.log('Component content:', componentContent);
         
-        // 首先清除所有高亮
+        // 获取该component的linkedIntents
+        const combinedResult = combinedResults.find(result => result.id === componentId);
+        const linkedIntents = combinedResult?.linkedIntents || [];
+        
+        // 正确地只清除highlight属性，保留dimension相关属性
         const cleanValue = editorValue.map(node => ({
             ...node,
             children: node.children.map(child => {
-                const { highlight, componentId: oldComponentId, ...cleanChild } = child;
+                if (typeof child === 'string') {
+                    return child;
+                }
+                // 只移除highlight属性，保留其他所有属性
+                const { highlight, ...cleanChild } = child;
                 return cleanChild;
             })
         }));
-
+    
         const position = findTextInEditor(componentContent, cleanValue);
         if (!position) {
             console.log('Position not found, returning clean value');
             return cleanValue;
         }
-
+    
         console.log('Found position:', position);
-
+    
         // 构建位置映射：从标准化文本位置映射到实际节点位置
         let currentNormalizedPos = 0;
         let nodePositions = [];
@@ -550,9 +586,9 @@ const EmailEditor = () => {
                 currentNormalizedPos += 1; // 段落间的空格
             }
         });
-
+    
         console.log('Node positions:', nodePositions);
-
+    
         // 找到需要高亮的节点范围
         const highlightStart = position.start;
         const highlightEnd = position.end;
@@ -560,81 +596,169 @@ const EmailEditor = () => {
         const affectedNodes = nodePositions.filter(pos => 
             !(pos.normalizedEnd <= highlightStart || pos.normalizedStart >= highlightEnd)
         );
-
+    
         console.log('Affected nodes:', affectedNodes);
-
+    
         if (affectedNodes.length === 0) {
             return cleanValue;
         }
-
+    
         // 应用高亮到受影响的节点
         const newValue = cleanValue.map((node, nodeIndex) => {
             const nodePos = nodePositions.find(pos => pos.nodeIndex === nodeIndex);
             if (!nodePos || !affectedNodes.includes(nodePos)) {
                 return node;
             }
-
+    
             // 计算在当前节点中的高亮范围
             const nodeStart = Math.max(0, highlightStart - nodePos.normalizedStart);
             const nodeEnd = Math.min(nodePos.normalizedText.length, highlightEnd - nodePos.normalizedStart);
-
+    
             console.log(`Node ${nodeIndex}: highlighting from ${nodeStart} to ${nodeEnd} in "${nodePos.normalizedText}"`);
-
+    
             if (nodeStart >= nodeEnd) {
                 return node;
             }
-
-            // 在原始文本中找到对应位置（考虑到标准化时可能改变的空格）
+    
+            // 改进的文本分割逻辑，确保精确的边界控制
             const originalText = nodePos.originalText;
+            
+            // 更精确的位置映射
             let originalStart = 0;
             let originalEnd = originalText.length;
-
-            // 简单映射：如果是部分高亮，尝试在原文中找到相似的位置
+            
             if (nodeStart > 0 || nodeEnd < nodePos.normalizedText.length) {
-                // 对于部分匹配，使用比例来估算位置
-                const startRatio = nodeStart / nodePos.normalizedText.length;
-                const endRatio = nodeEnd / nodePos.normalizedText.length;
+                // 尝试在原文中找到更精确的匹配位置
+                const targetText = nodePos.normalizedText.substring(nodeStart, nodeEnd);
+                const normalizedOriginal = originalText.replace(/\s+/g, ' ').trim().toLowerCase();
                 
-                originalStart = Math.floor(originalText.length * startRatio);
-                originalEnd = Math.ceil(originalText.length * endRatio);
+                // 在标准化的原文中查找目标文本
+                const targetIndex = normalizedOriginal.indexOf(targetText);
+                
+                if (targetIndex !== -1) {
+                    // 找到精确匹配，映射回原文位置
+                    let charCount = 0;
+                    let mappedStart = -1;
+                    let mappedEnd = -1;
+                    
+                    for (let i = 0; i < originalText.length; i++) {
+                        const normalizedChar = originalText[i].toLowerCase();
+                        if (normalizedChar.match(/\s/)) {
+                            if (charCount === targetIndex && mappedStart === -1) {
+                                mappedStart = i;
+                            }
+                            continue;
+                        }
+                        
+                        if (charCount === targetIndex && mappedStart === -1) {
+                            mappedStart = i;
+                        }
+                        if (charCount === targetIndex + targetText.length - 1 && mappedEnd === -1) {
+                            mappedEnd = i + 1;
+                            break;
+                        }
+                        charCount++;
+                    }
+                    
+                    if (mappedStart !== -1 && mappedEnd !== -1) {
+                        originalStart = mappedStart;
+                        originalEnd = mappedEnd;
+                    }
+                } else {
+                    // 如果找不到精确匹配，使用比例估算，但更保守
+                    const startRatio = nodeStart / nodePos.normalizedText.length;
+                    const endRatio = nodeEnd / nodePos.normalizedText.length;
+                    
+                    originalStart = Math.floor(originalText.length * startRatio);
+                    originalEnd = Math.ceil(originalText.length * endRatio);
+                    
+                    // 额外的边界检查，防止超出预期范围
+                    const maxLength = Math.min(componentContent.length, originalText.length);
+                    originalEnd = Math.min(originalEnd, originalStart + maxLength);
+                }
             }
-
-            // 确保边界有效
+            
+            // 确保边界有效且合理
             originalStart = Math.max(0, Math.min(originalStart, originalText.length));
             originalEnd = Math.max(originalStart, Math.min(originalEnd, originalText.length));
-
-            console.log(`Mapping to original text positions: ${originalStart} to ${originalEnd}`);
-
-            // 分割文本并应用高亮
+            
+            // 额外检查：确保高亮长度不会明显超过component内容长度
+            const highlightLength = originalEnd - originalStart;
+            const componentLength = componentContent.replace(/\s+/g, ' ').trim().length;
+            
+            if (highlightLength > componentLength * 1.2) { // 允许20%的误差
+                originalEnd = originalStart + Math.min(highlightLength, Math.ceil(componentLength * 1.1));
+            }
+    
+            console.log(`Mapping to original text positions: ${originalStart} to ${originalEnd} (length: ${originalEnd - originalStart})`);
+    
+            // 分割文本并应用高亮，保留现有的dimension属性
             const beforeText = originalText.substring(0, originalStart);
             const highlightText = originalText.substring(originalStart, originalEnd);
             const afterText = originalText.substring(originalEnd);
-
+    
             const newChildren = [];
+            
+            // 处理高亮前的文本
             if (beforeText) {
-                newChildren.push({ text: beforeText });
+                // 查找现有的child，保留其dimension属性
+                const existingChild = node.children.find(child => 
+                    child.text && child.text.includes(beforeText)
+                );
+                newChildren.push({ 
+                    text: beforeText,
+                    // 保留现有的dimension属性
+                    ...(existingChild ? {
+                        hasDimensions: existingChild.hasDimensions,
+                        linkedIntents: existingChild.linkedIntents,
+                        componentId: existingChild.componentId
+                    } : {})
+                });
             }
+            
+            // 处理高亮文本
             if (highlightText) {
+                // 查找现有的child，保留其dimension属性并添加高亮
+                const existingChild = node.children.find(child => 
+                    child.text && child.text.includes(highlightText)
+                );
+                
                 newChildren.push({ 
                     text: highlightText, 
                     highlight: true, 
-                    componentId: componentId 
+                    componentId: componentId,
+                    // 保留或设置dimension属性
+                    hasDimensions: existingChild?.hasDimensions || (linkedIntents.length > 0),
+                    linkedIntents: existingChild?.linkedIntents || linkedIntents
                 });
             }
+            
+            // 处理高亮后的文本
             if (afterText) {
-                newChildren.push({ text: afterText });
+                // 查找现有的child，保留其dimension属性
+                const existingChild = node.children.find(child => 
+                    child.text && child.text.includes(afterText)
+                );
+                newChildren.push({ 
+                    text: afterText,
+                    // 保留现有的dimension属性
+                    ...(existingChild ? {
+                        hasDimensions: existingChild.hasDimensions,
+                        linkedIntents: existingChild.linkedIntents,
+                        componentId: existingChild.componentId
+                    } : {})
+                });
             }
-
+    
             return {
                 ...node,
                 children: newChildren.length > 0 ? newChildren : [{ text: originalText }]
             };
         });
-
+    
         console.log('Applied highlighting, returning new value');
         return newValue;
     };
-
     // 修复后的高亮应用函数
     const applyHighlighting = (componentContent, componentId) => {
         console.log('Applying highlighting for:', componentContent);
@@ -643,13 +767,12 @@ const EmailEditor = () => {
         setEditorKey(prev => prev + 1);
     };
 
-    // 修复后的移除高亮函数
     const removeAllHighlighting = () => {
         const cleanValue = value.map(node => ({
             ...node,
             children: node.children.map(child => {
-                // 移除高亮属性但保留其他格式
-                const { highlight, componentId, ...cleanChild } = child;
+                // 只移除highlight属性，保留dimension相关属性
+                const { highlight, ...cleanChild } = child;
                 return cleanChild;
             })
         }));
@@ -759,82 +882,351 @@ const EmailEditor = () => {
         }
     };
 
-    const renderLeaf = ({ attributes, children, leaf }) => {
-        let element = children;
+// New function to apply dimension markers to all components at once
+const applyAllDimensions = () => {
+    if (!combinedResults || combinedResults.length === 0) {
+        console.log('No combined results available');
+        return;
+    }
+
+    let newValue = [...value];
+    
+    // Apply dimensions for each component
+    combinedResults.forEach(component => {
+        if (component.linkedIntents && component.linkedIntents.length > 0) {
+            newValue = applyDimensionsToValue(newValue, component.content, component.id, component.linkedIntents);
+        }
+    });
+    
+    setValue(newValue);
+    setEditorKey(prev => prev + 1);
+};
+
+// Modified function to apply dimensions without removing existing ones
+const applyDimensionsToValue = (editorValue, componentContent, componentId, linkedIntents) => {
+    console.log('Applying dimensions for component:', componentId);
+    console.log('Component content:', componentContent);
+    
+    const position = findTextInEditor(componentContent, editorValue);
+    if (!position) {
+        console.log('Position not found for component:', componentId);
+        return editorValue;
+    }
+
+    console.log('Found position:', position);
+
+    // Build position mapping: from normalized text position to actual node positions
+    let currentNormalizedPos = 0;
+    let nodePositions = [];
+    
+    editorValue.forEach((node, nodeIndex) => {
+        const nodeText = getNodeText(null, node);
+        const normalizedNodeText = nodeText.replace(/\s+/g, ' ').trim().toLowerCase();
         
-        if (leaf.bold) {
-            element = <strong>{element}</strong>;
-        }
-        if (leaf.italic) {
-            element = <em>{element}</em>;
-        }
-        if (leaf.underline) {
-            element = <u>{element}</u>;
-        }
+        nodePositions.push({
+            nodeIndex,
+            originalText: nodeText,
+            normalizedText: normalizedNodeText,
+            normalizedStart: currentNormalizedPos,
+            normalizedEnd: currentNormalizedPos + normalizedNodeText.length,
+            node
+        });
         
-        // Apply highlighting style with dimension buttons
-        if (leaf.highlight) {
-            // Find the corresponding combined result for this component
-            const combinedResult = combinedResults.find(result => result.id === leaf.componentId);
-            const dimensions = combinedResult?.linkedIntents || [];
+        currentNormalizedPos += normalizedNodeText.length;
+        if (nodeIndex < editorValue.length - 1) {
+            currentNormalizedPos += 1; // Space between paragraphs
+        }
+    });
+
+    // Find nodes that need dimension markers
+    const highlightStart = position.start;
+    const highlightEnd = position.end;
+    
+    const affectedNodes = nodePositions.filter(pos => 
+        !(pos.normalizedEnd <= highlightStart || pos.normalizedStart >= highlightEnd)
+    );
+
+    if (affectedNodes.length === 0) {
+        return editorValue;
+    }
+
+    // Apply dimension markers to affected nodes
+    const newValue = editorValue.map((node, nodeIndex) => {
+        const nodePos = nodePositions.find(pos => pos.nodeIndex === nodeIndex);
+        if (!nodePos || !affectedNodes.includes(nodePos)) {
+            return node;
+        }
+
+        // Calculate highlight range within current node
+        const nodeStart = Math.max(0, highlightStart - nodePos.normalizedStart);
+        const nodeEnd = Math.min(nodePos.normalizedText.length, highlightEnd - nodePos.normalizedStart);
+
+        if (nodeStart >= nodeEnd) {
+            return node;
+        }
+
+        // Map to original text positions
+        const originalText = nodePos.originalText;
+        let originalStart = 0;
+        let originalEnd = originalText.length;
+
+        // For partial matches, estimate positions
+        if (nodeStart > 0 || nodeEnd < nodePos.normalizedText.length) {
+            const startRatio = nodeStart / nodePos.normalizedText.length;
+            const endRatio = nodeEnd / nodePos.normalizedText.length;
             
-            element = (
-                <span style={{ position: 'relative', display: 'inline-block' }}>
-                    {/* Dimension buttons above the highlighted text */}
-                    {dimensions.length > 0 && (
-                        <div style={{
-                            position: 'absolute',
-                            top: '-12px', // 从 -25px 改为 -12px，让按钮距离文本仅2px
-                            left: '0',
-                            display: 'flex',
-                            gap: '4px',
-                            zIndex: 10,
-                            flexWrap: 'wrap'
-                        }}>
-                            {dimensions.map((intent, index) => (
-                                <Button
-                                    key={`${leaf.componentId}-${index}`}
-                                    size="small"
-                                    shape="circle"
-                                    style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        minWidth: '10px',
-                                        padding: '0',
-                                        fontSize: '8px',
-                                        backgroundColor: getDimensionColor(intent.dimension),
-                                        border: 'none',
-                                        cursor: 'pointer'
-                                    }}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDimensionClick(intent, leaf.componentId);
-                                    }}
-                                    title={intent.dimension}
-                                />
-                            ))}
-                        </div>
-                    )}
-                    
-                    <span
-                        style={{
-                            backgroundColor: '#fff3cd',
-                            border: '1px solid #ffc107',
-                            borderRadius: '2px',
-                            padding: '1px 2px',
-                            cursor: 'pointer',
-                            display: 'inline-block'
-                        }}
-                        onClick={(e) => handleHighlightClick(e, leaf.componentId)}
-                    >
-                        {element}
-                    </span>
-                </span>
-            );
+            originalStart = Math.floor(originalText.length * startRatio);
+            originalEnd = Math.ceil(originalText.length * endRatio);
+        }
+
+        // Ensure valid boundaries
+        originalStart = Math.max(0, Math.min(originalStart, originalText.length));
+        originalEnd = Math.max(originalStart, Math.min(originalEnd, originalText.length));
+
+        // Split text and apply dimension markers
+        const beforeText = originalText.substring(0, originalStart);
+        const dimensionText = originalText.substring(originalStart, originalEnd);
+        const afterText = originalText.substring(originalEnd);
+
+        const newChildren = [];
+        if (beforeText) {
+            newChildren.push({ text: beforeText });
+        }
+        if (dimensionText) {
+            newChildren.push({ 
+                text: dimensionText, 
+                hasDimensions: true, 
+                componentId: componentId,
+                linkedIntents: linkedIntents
+            });
+        }
+        if (afterText) {
+            newChildren.push({ text: afterText });
+        }
+
+        return {
+            ...node,
+            children: newChildren.length > 0 ? newChildren : [{ text: originalText }]
+        };
+    });
+
+    return newValue;
+};
+// 2. 新增：为所有components初始化dimension标记的函数
+const initializeAllDimensions = () => {
+    if (!combinedResults || combinedResults.length === 0) {
+        console.log('No combined results available');
+        return;
+    }
+
+    let newValue = [...value];
+    
+    // 为每个component添加dimension标记
+    combinedResults.forEach(component => {
+        if (component.linkedIntents && component.linkedIntents.length > 0) {
+            newValue = addDimensionsToValue(newValue, component.content, component.id, component.linkedIntents);
+        }
+    });
+    
+    setValue(newValue);
+    setEditorKey(prev => prev + 1);
+};
+
+// 3. 新增：为特定component内容添加dimension标记的函数
+const addDimensionsToValue = (editorValue, componentContent, componentId, linkedIntents) => {
+    const position = findTextInEditor(componentContent, editorValue);
+    if (!position) {
+        console.log('Position not found for component:', componentId);
+        return editorValue;
+    }
+
+    // 构建位置映射
+    let currentNormalizedPos = 0;
+    let nodePositions = [];
+    
+    editorValue.forEach((node, nodeIndex) => {
+        const nodeText = getNodeText(null, node);
+        const normalizedNodeText = nodeText.replace(/\s+/g, ' ').trim().toLowerCase();
+        
+        nodePositions.push({
+            nodeIndex,
+            originalText: nodeText,
+            normalizedText: normalizedNodeText,
+            normalizedStart: currentNormalizedPos,
+            normalizedEnd: currentNormalizedPos + normalizedNodeText.length,
+            node
+        });
+        
+        currentNormalizedPos += normalizedNodeText.length;
+        if (nodeIndex < editorValue.length - 1) {
+            currentNormalizedPos += 1;
+        }
+    });
+
+    // 找到需要添加dimension的节点
+    const highlightStart = position.start;
+    const highlightEnd = position.end;
+    
+    const affectedNodes = nodePositions.filter(pos => 
+        !(pos.normalizedEnd <= highlightStart || pos.normalizedStart >= highlightEnd)
+    );
+
+    if (affectedNodes.length === 0) {
+        return editorValue;
+    }
+
+    // 为受影响的节点添加dimension标记
+    const newValue = editorValue.map((node, nodeIndex) => {
+        const nodePos = nodePositions.find(pos => pos.nodeIndex === nodeIndex);
+        if (!nodePos || !affectedNodes.includes(nodePos)) {
+            return node;
+        }
+
+        const nodeStart = Math.max(0, highlightStart - nodePos.normalizedStart);
+        const nodeEnd = Math.min(nodePos.normalizedText.length, highlightEnd - nodePos.normalizedStart);
+
+        if (nodeStart >= nodeEnd) {
+            return node;
+        }
+
+        const originalText = nodePos.originalText;
+        let originalStart = 0;
+        let originalEnd = originalText.length;
+
+        if (nodeStart > 0 || nodeEnd < nodePos.normalizedText.length) {
+            const startRatio = nodeStart / nodePos.normalizedText.length;
+            const endRatio = nodeEnd / nodePos.normalizedText.length;
+            
+            originalStart = Math.floor(originalText.length * startRatio);
+            originalEnd = Math.ceil(originalText.length * endRatio);
+        }
+
+        originalStart = Math.max(0, Math.min(originalStart, originalText.length));
+        originalEnd = Math.max(originalStart, Math.min(originalEnd, originalText.length));
+
+        // 分割文本并添加dimension标记
+        const beforeText = originalText.substring(0, originalStart);
+        const dimensionText = originalText.substring(originalStart, originalEnd);
+        const afterText = originalText.substring(originalEnd);
+
+        const newChildren = [];
+        if (beforeText) {
+            newChildren.push({ text: beforeText });
+        }
+        if (dimensionText) {
+            newChildren.push({ 
+                text: dimensionText,
+                hasDimensions: true,
+                componentId: componentId,
+                linkedIntents: linkedIntents
+            });
+        }
+        if (afterText) {
+            newChildren.push({ text: afterText });
+        }
+
+        return {
+            ...node,
+            children: newChildren.length > 0 ? newChildren : [{ text: originalText }]
+        };
+    });
+
+    return newValue;
+};
+// 4. 修改后的renderLeaf函数 - 始终显示dimension圆圈
+const renderLeaf = ({ attributes, children, leaf }) => {
+    let element = children;
+    
+    if (leaf.bold) {
+        element = <strong>{element}</strong>;
+    }
+    if (leaf.italic) {
+        element = <em>{element}</em>;
+    }
+    if (leaf.underline) {
+        element = <u>{element}</u>;
+    }
+    
+    // 检查是否有dimension标记，无论是否高亮都显示圆圈
+    const hasDimensions = leaf.hasDimensions && leaf.linkedIntents && leaf.linkedIntents.length > 0;
+    const isHighlighted = leaf.highlight;
+    
+    if (hasDimensions || isHighlighted) {
+        // 获取dimension信息
+        let dimensions = [];
+        if (leaf.linkedIntents) {
+            dimensions = leaf.linkedIntents;
+        } else if (leaf.componentId) {
+            // 如果没有直接的linkedIntents，从combinedResults中查找
+            const combinedResult = combinedResults.find(result => result.id === leaf.componentId);
+            dimensions = combinedResult?.linkedIntents || [];
         }
         
-        return <span {...attributes}>{element}</span>;
-    };
+        // 根据是否高亮设置不同的文本样式
+        const textStyle = isHighlighted ? {
+            backgroundColor: '#fff3cd',
+            border: '1px solid #ffc107',
+            borderRadius: '2px',
+            padding: '1px 2px',
+            cursor: 'pointer',
+            display: 'inline-block'
+        } : {
+            cursor: 'pointer',
+            display: 'inline-block'
+        };
+        
+        element = (
+            <span style={{ position: 'relative', display: 'inline-block' }}>
+                {/* 始终显示dimension圆圈 */}
+                {dimensions.length > 0 && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '-12px',
+                        left: '0',
+                        display: 'flex',
+                        gap: '4px',
+                        zIndex: 10,
+                        flexWrap: 'wrap'
+                    }}>
+                        {dimensions.map((intent, index) => (
+                            <Button
+                                key={`${leaf.componentId}-${index}`}
+                                size="small"
+                                shape="circle"
+                                style={{
+                                    width: '10px',
+                                    height: '10px',
+                                    minWidth: '10px',
+                                    padding: '0',
+                                    fontSize: '8px',
+                                    backgroundColor: getDimensionColor(intent.dimension),
+                                    border: 'none',
+                                    cursor: 'pointer'
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDimensionClick(intent, leaf.componentId);
+                                }}
+                                title={intent.dimension}
+                            />
+                        ))}
+                    </div>
+                )}
+                
+                <span
+                    style={textStyle}
+                    onClick={(e) => handleHighlightClick(e, leaf.componentId)}
+                >
+                    {element}
+                </span>
+            </span>
+        );
+    }
+    
+    return <span {...attributes}>{element}</span>;
+};
+
+
     // Add these helper functions before the return statement
 const getDimensionColor = (dimension) => {
     // Generate consistent colors for each dimension
@@ -848,8 +1240,38 @@ const getDimensionColor = (dimension) => {
 
 const handleDimensionClick = (intent, componentId) => {
     console.log('Dimension clicked:', intent.dimension, 'for component:', componentId);
-    // You can add logic here to show intent options or perform other actions
-    message.info(`Clicked dimension: ${intent.dimension}`);
+    
+    // 查找对应的组件
+    const component = components.find(c => c.id === componentId);
+    if (!component) {
+        console.log('Component not found:', componentId);
+        return;
+    }
+
+    // 检查当前组件是否已经被选中和高亮
+    const isCurrentlySelected = selectedComponentId === componentId;
+    const isCurrentlyHighlighted = value.some(node => 
+        node.children.some(child => 
+            child.highlight && child.componentId === componentId
+        )
+    );
+
+    // 如果已经选中且高亮，则不执行任何操作
+    if (isCurrentlySelected && isCurrentlyHighlighted) {
+        console.log('Component already selected and highlighted, no action needed');
+        return;
+    }
+
+    // 选中对应的组件
+    console.log('Selecting component:', component.id);
+    setSelectedComponentId(component.id);
+    
+    // 高亮对应的内容
+    console.log('Highlighting component content:', component.content);
+    applyHighlighting(component.content, component.id);
+    
+    // 可选：显示提示信息
+    message.info(`Selected dimension: ${intent.dimension}`);
 };
 
     // Handle keyboard shortcuts
@@ -941,6 +1363,12 @@ const handleDimensionClick = (intent, componentId) => {
 
             console.log('Combined Result:', combinedResult);
             setCombinedResults(combinedResult); // Store in state
+             // 初始化所有dimension标记
+            setTimeout(() => {
+                if (combinedResult.length > 0) {
+                    initializeAllDimensions();
+                }
+            }, 100);
         } catch (error) {
             console.error('Error processing combined result:', error);
         }

@@ -5,43 +5,43 @@
     "other_values": [
       "Formal, direct",
       "Brief, professional",
-      "Inquisitive"
+      "Inquisitive, problem-focused"
     ]
   },
   {
-    "dimension": "Purpose Prioritization",
-    "current_value": "Inform, build rapport, entertain (enthusiasm)",
-    "other_values": [
-      "Direct information transfer",
-      "Solely build rapport",
-      "Express specific gratitude only"
-    ]
-  },
-  {
-    "dimension": "Gratitude Expression",
-    "current_value": "Specific, appreciative, and enthusiastic",
+    "dimension": "Expression of Gratitude",
+    "current_value": "Specific, appreciative",
     "other_values": [
       "General thank you",
-      "Subtle acknowledgment",
-      "Professional appreciation only"
+      "Implicit appreciation",
+      "No explicit gratitude"
     ]
   },
   {
-    "dimension": "Engagement Demonstration",
-    "current_value": "Highlighting enjoyment and future interest",
+    "dimension": "Enthusiasm/Rapport Building",
+    "current_value": "Expressive, detailed",
     "other_values": [
-      "Stating general interest",
-      "Asking a direct question",
-      "Mentioning a specific concept"
+      "Subtle, implied",
+      "Focus on intellectual engagement",
+      "Brief, understated"
     ]
   },
   {
-    "dimension": "Closing Tone",
-    "current_value": "Reinforce gratitude, positive",
+    "dimension": "Call to Action/Forward Look",
+    "current_value": "Anticipatory, open-ended",
     "other_values": [
-      "Standard professional",
-      "Forward-looking",
-      "Brief and neutral"
+      "Direct question for meeting",
+      "No forward-looking statement",
+      "Suggesting further discussion"
+    ]
+  },
+  {
+    "dimension": "Closing Statement",
+    "current_value": "Reinforce appreciation, positive",
+    "other_values": [
+      "Standard professional closing",
+      "Brief, formal sign-off",
+      "Hopeful for future interaction"
     ]
   }
 ]
