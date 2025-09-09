@@ -1,259 +1,201 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useGlobalContext } from '../App';
 import { Card, Input, Row, Col, Button, message, Radio } from 'antd';
-import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 
 const AnchorBuilder = () => {
     const location = useLocation();
-    const { anchorContent } = location.state || {};
-    const [personaTitle, setPersonaTitle] = useState('');
-    const [personaDescription, setPersonaDescription] = useState('');
-    const [situationTitle, setSituationTitle] = useState('');
-    const [situationDescription, setSituationDescription] = useState('');
-    const [isEditingPersona, setIsEditingPersona] = useState(false);
-    const [isEditingSituation, setIsEditingSituation] = useState(false);
-    const [selectedAnchorType, setSelectedAnchorType] = useState('persona');
-    const [editorPrompt, setEditorPrompt] = useState('');
+    const [personaData, setPersonaData] = useState(null);
+    const [situationData, setSituationData] = useState(null);
+    const [personaEditorPrompt, setPersonaEditorPrompt] = useState('');
+    const [situationEditorPrompt, setSituationEditorPrompt] = useState('');
+    const [regeneratingPersona, setRegeneratingPersona] = useState(false);
+    const [regeneratingSituation, setRegeneratingSituation] = useState(false);
+    const [regeneratingPersonaAnchor, setRegeneratingPersonaAnchor] = useState(false);
+    const [regeneratingSituationAnchor, setRegeneratingSituationAnchor] = useState(false);
+    const { state } = location;
+    const userTask = state?.userTask || '';
+    const anchorContent = state?.anchorContent || {};
+    console.log('Full anchorContent:', anchorContent);
+    console.log('personaImagePath:', anchorContent?.personaImagePath);
+    console.log('situationImagePath:', anchorContent?.situationImagePath);
+    const navigate = useNavigate();
+    const { globalState } = useGlobalContext();
+    const { username: globalUsername, taskId: globalTaskId, userTask: globalUserTask } = globalState;
 
-    // Parse the anchorContent into persona and situation anchors
-    React.useEffect(() => {
-        if (anchorContent) {
+    // Use global state
+    const taskId = globalTaskId;
+    const userName = globalUsername;
+
+    // Load anchor data from JSON files
+    useEffect(() => {
+        const loadAnchorData = async () => {
             try {
-                // Remove Markdown-style code block delimiters
-                const sanitizedContent = anchorContent.replace(/```json|```/g, '');
-                const parsedContent = JSON.parse(sanitizedContent);
-                setPersonaTitle(parsedContent.persona?.title || 'Persona Anchor');
-                setPersonaDescription(parsedContent.persona?.description || '');
-                setSituationTitle(parsedContent.situation?.title || 'Situation Anchor');
-                setSituationDescription(parsedContent.situation?.description || '');
-            } catch (error) {
-                console.error('Failed to parse anchor content:', error);
-                message.error('Failed to load anchor content.');
-            }
-        }
-    }, [anchorContent]);
-
-    const handleSavePersona = async () => {
-        const { userName, taskId } = location.state || {}; // 从 location.state 获取 userName 和 taskId
-
-        if (!userName || !taskId) {
-            message.error('Missing userName or taskId. Please try again.');
-            return;
-        }
-
-        try {
-            const response = await axios.post('http://localhost:3001/api/update-anchor', {
-                type: 'persona',
-                title: personaTitle,
-                description: personaDescription,
-                userName, // 添加 userName
-                taskId,   // 添加 taskId
-            });
-
-            if (response.status === 200) {
-                message.success('Persona Anchor saved successfully!');
-                setIsEditingPersona(false);
-            } else {
-                throw new Error('Failed to save Persona Anchor');
-            }
-        } catch (error) {
-            console.error('Error saving Persona Anchor:', error);
-            message.error('Failed to save Persona Anchor. Please try again.');
-        }
-    };
-
-    const handleSaveSituation = async () => {
-        const { userName, taskId } = location.state || {}; // 从 location.state 获取 userName 和 taskId
-
-        if (!userName || !taskId) {
-            message.error('Missing userName or taskId. Please try again.');
-            return;
-        }
-
-        try {
-            const response = await axios.post('http://localhost:3001/api/update-anchor', {
-                type: 'situation',
-                title: situationTitle,
-                description: situationDescription,
-                userName, // 添加 userName
-                taskId,   // 添加 taskId
-            });
-
-            if (response.status === 200) {
-                message.success('Situation Anchor saved successfully!');
-                setIsEditingSituation(false);
-            } else {
-                throw new Error('Failed to save Situation Anchor');
-            }
-        } catch (error) {
-            console.error('Error saving Situation Anchor:', error);
-            message.error('Failed to save Situation Anchor. Please try again.');
-        }
-    };
-
-    const handleRegenerateAnchor = async () => {
-        const { userName, taskId, userTask } = location.state || {}; // Get userName, taskId, and userTask from location.state
-
-        if (!userName || !taskId || !userTask) {
-            message.error('Missing userName, taskId, or userTask. Please try again.');
-            return;
-        }
-
-        if (!editorPrompt.trim()) {
-            message.error('Please input your instruction prompts.');
-            return;
-        }
-
-        try {
-            const response = await axios.post('http://localhost:3001/api/regenerate-anchor', {
-                userName,
-                taskId,
-                userTask, // Pass userTask to the backend
-                anchorType: selectedAnchorType,
-                userPrompt: editorPrompt,
-            });
-
-            if (response.status === 200) {
-                message.success(`${selectedAnchorType} Anchor regenerated successfully!`);
-                const updatedAnchor = response.data.updatedAnchor;
-                if (selectedAnchorType === 'persona') {
-                    setPersonaTitle(updatedAnchor.title);
-                    setPersonaDescription(updatedAnchor.description);
-                } else {
-                    setSituationTitle(updatedAnchor.title);
-                    setSituationDescription(updatedAnchor.description);
+                if (anchorContent.personaJsonPath) {
+                    const personaResponse = await axios.get(`http://localhost:3001/user-data/${userName}/${anchorContent.personaJsonPath.split('/').slice(-2).join('/')}`);
+                    setPersonaData(personaResponse.data);
+                    console.log('Loaded persona data:', personaResponse.data);
                 }
-            } else {
-                throw new Error('Failed to regenerate anchor');
+                if (anchorContent.situationJsonPath) {
+                    const situationResponse = await axios.get(`http://localhost:3001/user-data/${userName}/${anchorContent.situationJsonPath.split('/').slice(-2).join('/')}`);
+                    setSituationData(situationResponse.data);
+                    console.log('Loaded situation data:', situationResponse.data);
+                }
+            } catch (error) {
+                console.error('Failed to load anchor data:', error);
+                message.error('Failed to load anchor data');
             }
-        } catch (error) {
-            console.error('Error regenerating anchor:', error);
-            message.error('Failed to regenerate anchor. Please try again.');
+        };
+        
+        if (anchorContent.personaJsonPath || anchorContent.situationJsonPath) {
+            loadAnchorData();
         }
-    };
+    }, [anchorContent, userName]);
 
-    const handleSaveAndGenerateTemplate = async () => {
-        const { userName, taskId, userTask } = location.state || {}; // 从 location.state 获取 userName, taskId, userTask
-
-        if (!userName || !taskId || !userTask) {
-            message.error('Missing userName, taskId, or userTask. Please try again.');
+    const handleRegenerateImage = async (anchorType, anchorData) => {
+        if (!anchorData) {
+            message.error('Anchor data not loaded');
             return;
         }
 
-        try {
-            const response = await axios.post('http://localhost:3001/generate-anchor-builder', {
-                userTask,
-                userName,
-                taskId,
-            });
+        const isPersona = anchorType === 'PersonaAnchor';
+        const setLoading = isPersona ? setRegeneratingPersona : setRegeneratingSituation;
+        const imagePath = isPersona ? anchorContent.personaImagePath : anchorContent.situationImagePath;
 
-            if (response.status === 200) {
-                message.success('Anchor content generated successfully!');
-                console.log('Generated Anchor Data:', response.data.anchorData);
-            } else {
-                throw new Error('Failed to generate anchor content');
-            }
+        try {
+            setLoading(true);
+            
+            await axios.post('http://localhost:3002/regenerate-image', {
+                anchorType: anchorType,
+                anchorTitle: anchorData.title,
+                anchorDescription: anchorData.description,
+                imagePath: imagePath
+            });
+            
+            message.success('Image regenerated successfully');
+            
+            // 不刷新页面，只更新图片显示
+            const timestamp = new Date().getTime();
+            const imgElements = document.querySelectorAll('img');
+            imgElements.forEach(img => {
+                if (img.src.includes(anchorType)) {
+                    img.src = img.src.split('?')[0] + '?' + timestamp;
+                }
+            });
         } catch (error) {
-            console.error('Error generating anchor content:', error);
-            message.error('Failed to generate anchor content. Please try again.');
+            console.error('Failed to regenerate image:', error);
+            message.error('Failed to regenerate image');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRegenerateAnchor = async (anchorType, userPrompt) => {
+        if (!userPrompt.trim()) {
+            message.error('Please enter a prompt for regeneration');
+            return;
+        }
+
+        const isPersona = anchorType === 'persona';
+        const setLoading = isPersona ? setRegeneratingPersonaAnchor : setRegeneratingSituationAnchor;
+        const setData = isPersona ? setPersonaData : setSituationData;
+        const setPrompt = isPersona ? setPersonaEditorPrompt : setSituationEditorPrompt;
+        const anchorJsonPath = isPersona ? anchorContent.personaJsonPath : anchorContent.situationJsonPath;
+
+        try {
+            setLoading(true);
+            
+            const response = await axios.post('http://localhost:3001/regenerate-anchor', {
+                userName: userName,
+                taskId: taskId,
+                anchorJsonPath: anchorJsonPath,
+                userPrompt: userPrompt,
+                userTask: globalUserTask || userTask
+            });
+            
+            message.success('Anchor regenerated successfully');
+            setData(response.data.updatedAnchor);
+            setPrompt(''); // Clear the prompt after successful regeneration
+        } catch (error) {
+            console.error('Failed to regenerate anchor:', error);
+            message.error('Failed to regenerate anchor');
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
         <div className='anchor-builder-container' style={{ padding: '20px' ,width: '100% !important'}}>
-            <Row gutter={[16, 16]}>
-                <Col span={24}>
-                    <Card bordered style={{ width: '100%' }} title="Persona Anchor">
-                        {isEditingPersona ? (
-                            <>
-                                <Input
-                                    value={personaTitle}
-                                    onChange={(e) => setPersonaTitle(e.target.value)}
-                                    placeholder="Enter Persona Title"
-                                    style={{ marginBottom: '10px' }}
-                                />
-                                <Input.TextArea
-                                    value={personaDescription}
-                                    onChange={(e) => setPersonaDescription(e.target.value)}
-                                    rows={6}
-                                    placeholder="Enter Persona Description"
-                                />
-                            </>
-                        ) : (
-                            <>
-                                <h3>{personaTitle || 'No title available.'}</h3>
-                                <p>{personaDescription || 'No description available.'}</p>
-                            </>
-                        )}
-                        <div style={{ marginTop: '10px' }}>
-                            {isEditingPersona ? (
-                                <Button type="primary" onClick={handleSavePersona}>
-                                    Save
-                                </Button>
-                            ) : (
-                                <Button onClick={() => setIsEditingPersona(true)}>Edit</Button>
-                            )}
+            <Row gutter={[16, 16]} style={{ height: 'calc(100vh - 64px - 94px)' }}>
+                <Col span={12} style={{ height: '100%' ,display: 'flex', flexDirection: 'column'}}>
+                    <Card bordered style={{ width: '100%', minHeight: '700px'}} title="Persona Anchor">
+                        <div style={{ textAlign: 'center', marginBottom: '10px' ,borderBottom: '1px solid #eee', paddingBottom: '10px'}}>
+                        <img src={anchorContent?.personaImagePath ? `http://localhost:3001/user-data/${userName}/PersonaAnchor/${anchorContent.personaImagePath.split('/').pop()}` : ''} alt="Persona" style={{ width: '600px', height: '300px', objectFit: 'cover', display: 'block', margin: '0 auto' }} />
+                        <Button 
+                            color="primary" 
+                            variant="outlined" 
+                            style={{ marginTop: '10px' }}
+                            loading={regeneratingPersona}
+                            onClick={() => handleRegenerateImage('PersonaAnchor', personaData)}
+                        >
+                            ✨ Regenerate Image
+                        </Button>
                         </div>
-                    </Card>
-                </Col>
-            </Row>
-            <Row gutter={[16, 16]} style={{ marginTop: '20px' }}>
-                <Col span={24}>
-                    <Card bordered style={{ width: '100%' }} title="Situation Anchor">
-                        {isEditingSituation ? (
-                            <>
-                                <Input
-                                    value={situationTitle}
-                                    onChange={(e) => setSituationTitle(e.target.value)}
-                                    placeholder="Enter Situation Title"
-                                    style={{ marginBottom: '10px' }}
-                                />
-                                <Input.TextArea
-                                    value={situationDescription}
-                                    onChange={(e) => setSituationDescription(e.target.value)}
-                                    rows={6}
-                                    placeholder="Enter Situation Description"
-                                />
-                            </>
-                        ) : (
-                            <>
-                                <h3>{situationTitle || 'No title available.'}</h3>
-                                <p>{situationDescription || 'No description available.'}</p>
-                            </>
-                        )}
-                        <div style={{ marginTop: '10px' }}>
-                            {isEditingSituation ? (
-                                <Button type="primary" onClick={handleSaveSituation}>
-                                    Save
-                                </Button>
-                            ) : (
-                                <Button onClick={() => setIsEditingSituation(true)}>Edit</Button>
-                            )}
+                        <div className='personaAnchor'>
+                            <h3>{personaData?.title || 'No title available.'}</h3>
+                            <p>{personaData?.description || 'No description available.'}</p>
                         </div>
-                    </Card>
-                </Col>
-            </Row>
-            <Row gutter={[16, 16]} style={{ marginTop: '20px' ,width: '100% !important'}}>
-                <Col span={24}>
-                    <Card bordered style={{ width: '100% !important' }} title="Anchor Editor">
-                        <div>
-                            <Radio.Group
-                                value={selectedAnchorType}
-                                onChange={(e) => setSelectedAnchorType(e.target.value)}
-                                style={{ marginBottom: '10px' }}
-                            >
-                                <Radio value="persona">Persona Anchor</Radio>
-                                <Radio value="situation">Situation Anchor</Radio>
-                            </Radio.Group>
+                        <div className='personaAnchorRegenerate' style={{ textAlign: 'center', marginTop: '20px' }}>
                             <Input.TextArea
-                                value={editorPrompt}
-                                onChange={(e) => setEditorPrompt(e.target.value)}
                                 rows={4}
-                                placeholder="Please input your instruction prompts to regenerate selected anchor"
-                                style={{ marginBottom: '10px' }}
+                                value={personaEditorPrompt}
+                                onChange={(e) => setPersonaEditorPrompt(e.target.value)}
+                                placeholder="Enter your prompt here..."
                             />
-                            <Button type="primary" onClick={handleRegenerateAnchor}>
-                                Regenerate
+                            <Button 
+                                type="primary" 
+                                style={{marginTop: '10px'}}
+                                loading={regeneratingPersonaAnchor}
+                                onClick={() => handleRegenerateAnchor('persona', personaEditorPrompt)}
+                            >
+                                🪄 Regenerate Anchor
+                            </Button>
+                        </div>
+                    </Card>
+                </Col>
+                <Col span={12} style={{ height: '100%' ,display: 'flex', flexDirection: 'column'}}>
+                    <Card bordered style={{ width: '100%', minHeight: '700px'}} title="Situation Anchor">
+                        <div style={{ textAlign: 'center', marginBottom: '10px' ,borderBottom: '1px solid #eee', paddingBottom: '10px'}}>
+                        <img src={anchorContent?.situationImagePath ? `http://localhost:3001/user-data/${userName}/SituationAnchor/${anchorContent.situationImagePath.split('/').pop()}` : ''} alt="Situation" style={{ width: '600px', height: '300px', objectFit: 'cover', display: 'block', margin: '0 auto' }} />
+                        <Button 
+                            color="primary" 
+                            variant="outlined" 
+                            style={{ marginTop: '10px' }}
+                            loading={regeneratingSituation}
+                            onClick={() => handleRegenerateImage('SituationAnchor', situationData)}
+                        >
+                            ✨ Regenerate Image
+                        </Button>
+                        </div>
+                        <div className='situationAnchor'>
+                            <h3>{situationData?.title || 'No title available.'}</h3>
+                            <p>{situationData?.description || 'No description available.'}</p>
+                        </div>
+                        <div className='situationAnchorRegenerate' style={{ textAlign: 'center', marginTop: '20px' }}>
+                            <Input.TextArea
+                                rows={4}
+                                value={situationEditorPrompt}
+                                onChange={(e) => setSituationEditorPrompt(e.target.value)}
+                                placeholder="Enter your prompt here..."
+                            />
+                            <Button 
+                                type="primary" 
+                                style={{marginTop: '10px'}}
+                                loading={regeneratingSituationAnchor}
+                                onClick={() => handleRegenerateAnchor('situation', situationEditorPrompt)}
+                            >
+                                🪄 Regenerate Anchor
                             </Button>
                         </div>
                     </Card>

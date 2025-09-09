@@ -1,4 +1,5 @@
 Please generate an image: 
+"anchorType": {{ANCHOR_TYPE}},
 
 "title": {{ANCHOR_TITLE}}, 
 

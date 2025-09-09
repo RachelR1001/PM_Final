@@ -1,52 +1,71 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createEditor, Editor, Transforms, Range, Text } from 'slate';
 import { Slate, Editable, withReact, useSlate, ReactEditor } from 'slate-react';
-import { Card, Typography, message, Button, Row, Col, Tooltip, Tag, Radio, Checkbox, Flex } from 'antd';
+import { Card, Typography, message, Button, Row, Col, Tooltip, Tag, Radio, Checkbox, Flex, Modal, Input } from 'antd';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useGlobalContext } from '../App';
+import stylebookSVG from '../stylebook.svg';
 
 const { Title } = Typography;
 
 // Helper functions for text formatting
 const toggleFormat = (editor, format) => {
-    const isActive = isFormatActive(editor, format);
-    if (isActive) {
-        Editor.removeMark(editor, format);
-    } else {
-        Editor.addMark(editor, format, true);
+    try {
+        const isActive = isFormatActive(editor, format);
+        if (isActive) {
+            Editor.removeMark(editor, format);
+        } else {
+            Editor.addMark(editor, format, true);
+        }
+    } catch (error) {
+        console.warn('Error toggling format:', error);
     }
 };
 
 const isFormatActive = (editor, format) => {
-    const marks = Editor.marks(editor);
-    return marks ? marks[format] === true : false;
+    try {
+        const marks = Editor.marks(editor);
+        return marks ? marks[format] === true : false;
+    } catch (error) {
+        console.warn('Error checking format active state:', error);
+        return false;
+    }
 };
 
 const toggleBlock = (editor, format) => {
-    const isActive = isBlockActive(editor, format);
-    const isList = ['numbered-list', 'bulleted-list'].includes(format);
+    try {
+        const isActive = isBlockActive(editor, format);
+        const isList = ['numbered-list', 'bulleted-list'].includes(format);
 
-    Transforms.unwrapNodes(editor, {
-        match: n => ['numbered-list', 'bulleted-list'].includes(n.type),
-        split: true,
-    });
+        Transforms.unwrapNodes(editor, {
+            match: n => ['numbered-list', 'bulleted-list'].includes(n.type),
+            split: true,
+        });
 
-    Transforms.setNodes(editor, {
-        type: isActive ? 'paragraph' : isList ? 'list-item' : format,
-    });
+        Transforms.setNodes(editor, {
+            type: isActive ? 'paragraph' : isList ? 'list-item' : format,
+        });
 
-    if (!isActive && isList) {
-        const block = { type: format, children: [] };
-        Transforms.wrapNodes(editor, block);
+        if (!isActive && isList) {
+            const block = { type: format, children: [] };
+            Transforms.wrapNodes(editor, block);
+        }
+    } catch (error) {
+        console.warn('Error toggling block:', error);
     }
 };
 
 const isBlockActive = (editor, format) => {
-    const [match] = Editor.nodes(editor, {
-        match: n => n.type === format,
-    });
-    return !!match;
+    try {
+        const [match] = Editor.nodes(editor, {
+            match: n => n.type === format,
+        });
+        return !!match;
+    } catch (error) {
+        console.warn('Error checking block active state:', error);
+        return false;
+    }
 };
 
 // Safe node text extraction
@@ -80,214 +99,7 @@ const getNodeText = (editor, node) => {
     }
 };
 
-// Component that appears when text is selected/highlighted
-const FloatingToolbar = ({ component, onReplace, onClose, position }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editText, setEditText] = useState(component?.content || '');
 
-    if (!component || !position) return null;
-
-    const handleSave = () => {
-        onReplace(component.id, editText);
-        setIsEditing(false);
-        onClose();
-    };
-
-    const handleCancel = () => {
-        setEditText(component.content);
-        setIsEditing(false);
-        onClose();
-    };
-
-    return (
-        <div
-            style={{
-                position: 'absolute',
-                top: position.top - 80,
-                left: position.left,
-                background: 'white',
-                border: '1px solid #d9d9d9',
-                borderRadius: '6px',
-                padding: '12px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                zIndex: 1000,
-                minWidth: '320px',
-                maxWidth: '400px',
-            }}
-        >
-            <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666', fontWeight: 'bold' }}>
-                {component.title}
-            </div>
-            
-            {!isEditing ? (
-                <div>
-                    <div style={{ marginBottom: '8px', fontSize: '13px', lineHeight: '1.4' }}>
-                        {component.content}
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <Button size="small" onClick={() => setIsEditing(true)}>
-                            Edit Component
-                        </Button>
-                        <Button size="small" onClick={onClose}>
-                            Close
-                        </Button>
-                    </div>
-                </div>
-            ) : (
-                <div>
-                    <textarea
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        style={{
-                            width: '100%',
-                            minHeight: '80px',
-                            marginBottom: '8px',
-                            padding: '8px',
-                            border: '1px solid #d9d9d9',
-                            borderRadius: '4px',
-                            resize: 'vertical',
-                            fontSize: '13px',
-                        }}
-                        placeholder="Edit component content..."
-                    />
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <Button size="small" onClick={handleCancel}>
-                            Cancel
-                        </Button>
-                        <Button size="small" type="primary" onClick={handleSave}>
-                            Save Changes
-                        </Button>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// Toolbar Button Component
-const ToolbarButton = ({ format, children, isActive, onMouseDown }) => {
-    return (
-        <button
-            onMouseDown={onMouseDown}
-            style={{
-                padding: '8px 12px',
-                border: '1px solid #d9d9d9',
-                background: isActive ? '#1890ff' : '#fff',
-                color: isActive ? '#fff' : '#000',
-                cursor: 'pointer',
-                borderRadius: '4px',
-                marginRight: '4px',
-                fontSize: '14px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                minWidth: '32px',
-                justifyContent: 'center',
-            }}
-        >
-            {children}
-        </button>
-    );
-};
-
-// Toolbar Component
-const Toolbar = () => {
-    const editor = useSlate();
-
-    return (
-        <div style={{
-            padding: '8px',
-            borderBottom: '1px solid #d9d9d9',
-            background: '#fafafa',
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '4px',
-        }}>
-            {/* Text formatting buttons */}
-            <ToolbarButton
-                format="bold"
-                isActive={isFormatActive(editor, 'bold')}
-                onMouseDown={(event) => {
-                    event.preventDefault();
-                    toggleFormat(editor, 'bold');
-                }}
-            >
-                <strong>B</strong>
-            </ToolbarButton>
-            
-            <ToolbarButton
-                format="italic"
-                isActive={isFormatActive(editor, 'italic')}
-                onMouseDown={(event) => {
-                    event.preventDefault();
-                    toggleFormat(editor, 'italic');
-                }}
-            >
-                <em>I</em>
-            </ToolbarButton>
-            
-            <ToolbarButton
-                format="underline"
-                isActive={isFormatActive(editor, 'underline')}
-                onMouseDown={(event) => {
-                    event.preventDefault();
-                    toggleFormat(editor, 'underline');
-                }}
-            >
-                <u>U</u>
-            </ToolbarButton>
-
-            <div style={{ width: '1px', height: '24px', background: '#d9d9d9', margin: '0 8px' }} />
-
-            {/* Block element buttons */}
-            <ToolbarButton
-                format="heading-one"
-                isActive={isBlockActive(editor, 'heading-one')}
-                onMouseDown={(event) => {
-                    event.preventDefault();
-                    toggleBlock(editor, 'heading-one');
-                }}
-            >
-                H1
-            </ToolbarButton>
-            
-            <ToolbarButton
-                format="heading-two"
-                isActive={isBlockActive(editor, 'heading-two')}
-                onMouseDown={(event) => {
-                    event.preventDefault();
-                    toggleBlock(editor, 'heading-two');
-                }}
-            >
-                H2
-            </ToolbarButton>
-
-            <div style={{ width: '1px', height: '24px', background: '#d9d9d9', margin: '0 8px' }} />
-
-            {/* List buttons */}
-            <ToolbarButton
-                format="bulleted-list"
-                isActive={isBlockActive(editor, 'bulleted-list')}
-                onMouseDown={(event) => {
-                    event.preventDefault();
-                    toggleBlock(editor, 'bulleted-list');
-                }}
-            >
-                • List
-            </ToolbarButton>
-            
-            <ToolbarButton
-                format="numbered-list"
-                isActive={isBlockActive(editor, 'numbered-list')}
-                onMouseDown={(event) => {
-                    event.preventDefault();
-                    toggleBlock(editor, 'numbered-list');
-                }}
-            >
-                1. List
-            </ToolbarButton>
-        </div>
-    );
-};
 
 const EmailEditor = () => {
     const location = useLocation();
@@ -325,6 +137,134 @@ const EmailEditor = () => {
     const [combinedResults, setCombinedResults] = useState([]);
     const [previewContent, setPreviewContent] = useState('');
     
+    // Modal states for component change tracking
+    const [changeModal, setChangeModal] = useState({
+        visible: false,
+        oldContent: '',
+        newContent: '',
+        componentId: null
+    });
+    const [modificationReason, setModificationReason] = useState('');
+    const [lastModifiedComponent, setLastModifiedComponent] = useState(null);
+    const [regenerateLoading, setRegenerateLoading] = useState(false);
+    const [anchorLoading, setAnchorLoading] = useState(false);
+    
+
+    // Generate Anchors function
+    const handleGenerateAnchors = async () => {
+        try {
+            setAnchorLoading(true);
+            
+            const response = await axios.post('http://localhost:3001/generate-anchor-builder', {
+                userTask: userTask,
+                userName: globalUsername,
+                taskId: globalTaskId
+            });
+            
+            if (response.data && response.data.anchorData) {
+                // Parse anchor data as JSON
+                let parsedAnchorData;
+                try {
+                    const sanitizedContent = response.data.anchorData.replace(/```json|```/g, '');
+                    parsedAnchorData = JSON.parse(sanitizedContent);
+                } catch (error) {
+                    console.error('Failed to parse anchor data:', error);
+                    message.error('Failed to parse anchor data');
+                    return;
+                }
+                
+                // 调用图片生成和保存服务
+                const imageResponse = await axios.post('http://localhost:3002/generate-and-save-images', {
+                    userName: globalUsername,
+                    personaAnchor: parsedAnchorData.persona,
+                    situationAnchor: parsedAnchorData.situation
+                });
+                
+                // 将图片和JSON路径添加到anchor数据中
+                const anchorContentWithImages = {
+                    ...parsedAnchorData,
+                    personaImagePath: imageResponse.data.personaImagePath,
+                    situationImagePath: imageResponse.data.situationImagePath,
+                    personaJsonPath: imageResponse.data.personaJsonPath,
+                    situationJsonPath: imageResponse.data.situationJsonPath
+                };
+                console.log('Passing to AnchorBuilder:', anchorContentWithImages);
+                
+                // Navigate to AnchorBuilder page with the data
+                navigate('/anchorBuilders', {
+                    state: {
+                        anchorContent: anchorContentWithImages,
+                        userTask: userTask,
+                        userName: globalUsername,
+                        taskId: globalTaskId
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to generate anchors:', error);
+            message.error('Failed to generate anchors');
+        } finally {
+            setAnchorLoading(false);
+        }
+    };
+
+    // Regenerate Draft function
+    const handleRegenerateDraft = async () => {
+        try {
+            setRegenerateLoading(true);
+            
+            // Fetch factorChoices from current.json
+            const factorResponse = await axios.get(`http://localhost:3001/sessiondata/${globalTaskId}/intents/current.json`);
+            const factorChoices = factorResponse.data;
+            
+            // Call generate-first-draft endpoint
+            const response = await axios.post('http://localhost:3001/generate-first-draft', {
+                userTask: userTask,
+                factorChoices: factorChoices
+            });
+            
+            if (response.data) {
+                const newContent = response.data.draft || response.data;
+                setOriginalText(newContent);
+                
+                // Save to drafts/latest.md
+                await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
+                    content: newContent
+                });
+                
+                // Parse content into Slate format
+                const slateContent = newContent
+                    .split('\n\n')
+                    .filter(paragraph => paragraph.trim())
+                    .map((paragraph) => ({
+                        type: 'paragraph',
+                        children: [{ text: paragraph.trim() }],
+                    }));
+
+                if (slateContent.length === 0) {
+                    slateContent.push({
+                        type: 'paragraph',
+                        children: [{ text: '' }],
+                    });
+                }
+
+                setValue(slateContent);
+                setEditorKey(prev => prev + 1);
+                
+                // Clear components and results
+                setComponents([]);
+                setCombinedResults([]);
+                setSelectedComponentId(null);
+                
+                message.success('Draft regenerated successfully');
+            }
+        } catch (error) {
+            console.error('Failed to regenerate draft:', error);
+            message.error('Failed to regenerate draft');
+        } finally {
+            setRegenerateLoading(false);
+        }
+    };
 
     // Load draft content on component mount
     useEffect(() => {
@@ -385,6 +325,8 @@ const EmailEditor = () => {
     let commonComponents = [];
     let linkResults = null;
     let combinedResult = null;
+
+
 
         // 1. 新增：清除所有标记的函数
     const clearAllMarkers = () => {
@@ -743,10 +685,26 @@ const EmailEditor = () => {
     const handleComponentSelect = (component) => {
         console.log('Selecting component:', component);
         
+        // 如果toolbar还显示，则关闭它
+        if (floatingToolbar.visible) {
+            closeFloatingToolbar();
+        }
+        
         if (selectedComponentId === component.id) {
             // 如果点击的是已选中的组件，则取消选择
             console.log('Deselecting component');
             removeAllHighlighting();
+            return;
+        }
+        
+        // Check if there was a previous modification and show modal
+        if (lastModifiedComponent && lastModifiedComponent.componentId !== component.id) {
+            setChangeModal({
+                visible: true,
+                oldContent: lastModifiedComponent.oldContent,
+                newContent: lastModifiedComponent.newContent,
+                componentId: lastModifiedComponent.componentId
+            });
             return;
         }
         
@@ -778,40 +736,1215 @@ const EmailEditor = () => {
     };
 
     // Handle component replacement
-    const handleComponentReplace = (componentId, newContent) => {
-        // Update components state
-        const updatedComponents = components.map(comp => 
-            comp.id === componentId ? { ...comp, content: newContent } : comp
-        );
-        setComponents(updatedComponents);
+    const handleComponentReplace = async (componentId, newContent) => {
+        try {
+            // Update components state
+            const updatedComponents = components.map(comp => 
+                comp.id === componentId ? { ...comp, content: newContent } : comp
+            );
+            setComponents(updatedComponents);
 
-        // Update the original text content
-        let updatedText = originalText;
-        const component = components.find(c => c.id === componentId);
-        if (component) {
-            updatedText = updatedText.replace(component.content, newContent);
-            setOriginalText(updatedText);
+            // Update combinedResults
+            setCombinedResults(prev => prev.map(result => 
+                result.id === componentId 
+                    ? { ...result, content: newContent }
+                    : result
+            ));
+            
+            // Components state is already updated above, no need to update commonComponents
+
+            // Update the original text content
+            let updatedText = originalText;
+            const component = components.find(c => c.id === componentId);
+            if (component) {
+                updatedText = updatedText.replace(component.content, newContent);
+                setOriginalText(updatedText);
+                
+                // Save to draft file
+                await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
+                    content: updatedText
+                });
+            }
+
+            // Re-parse and update editor content
+            const slateContent = updatedText
+                .split('\n\n')
+                .filter(paragraph => paragraph.trim())
+                .map((paragraph) => ({
+                    type: 'paragraph',
+                    children: [{ text: paragraph.trim() }],
+                }));
+
+            setValue(slateContent);
+            
+            // Re-apply highlighting with new content and update range
+            setTimeout(() => {
+                // Clear existing highlighting first
+                const cleanValue = slateContent.map(node => ({
+                    ...node,
+                    children: node.children.map(child => {
+                        if (typeof child === 'string') {
+                            return child;
+                        }
+                        const { highlight, componentId: childCompId, ...cleanChild } = child;
+                        return cleanChild;
+                    })
+                }));
+                setValue(cleanValue);
+                
+                // Apply new highlighting with updated content
+                setTimeout(() => {
+                    applyHighlighting(newContent, componentId);
+                }, 50);
+            }, 100);
+            
+            message.success('Component updated successfully');
+        } catch (error) {
+            console.error('Failed to update component:', error);
+            message.error('Failed to save changes');
         }
+    };
+    // Component that appears when text is selected/highlighted
+const FloatingToolbar = ({ component, onReplace, onClose, position, value, setValue, setEditorKey, combinedResults, setCombinedResults, setComponents, originalText, setOriginalText, components, globalTaskId, getNodeText, setLastModifiedComponent }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [isRewriting, setIsRewriting] = useState(false);
+    const [isQuickfixing, setIsQuickfixing] = useState(false);
+    const [isQuickfixLoading, setIsQuickfixLoading] = useState(false);
+    const [isExpanding, setIsExpanding] = useState(false);
+    const [isExpandLoading, setIsExpandLoading] = useState(false);
+    const [isShortening, setIsShortening] = useState(false);
+    const [isShortenLoading, setIsShortenLoading] = useState(false);
+    const [detailsModal, setDetailsModal] = useState({ visible: false, recommendation: null });
+    const [quickfixRecommendations, setQuickfixRecommendations] = useState([]);
+    const [selectedRecommendation, setSelectedRecommendation] = useState(null);
+    const [editText, setEditText] = useState(component?.content || '');
+    const [rewritePrompt, setRewritePrompt] = useState('');
+    const [newContent, setNewContent] = useState('');
+    const [expandedContent, setExpandedContent] = useState('');
+    const [shortenedContent, setShortenedContent] = useState('');
+    const [isRewriteLoading, setIsRewriteLoading] = useState(false);
 
-        // Re-parse and update editor content
-        const slateContent = updatedText
-            .split('\n\n')
-            .filter(paragraph => paragraph.trim())
-            .map((paragraph) => ({
-                type: 'paragraph',
-                children: [{ text: paragraph.trim() }],
-            }));
+    if (!component || !position) return null;
 
-        setValue(slateContent);
-        
-        // Re-apply highlighting with new content
-        setTimeout(() => {
-            applyHighlighting(newContent, componentId);
-        }, 100);
-        
-        message.success('Component updated successfully');
+    const handleEdit = () => {
+        setIsEditing(true);
     };
 
+    const handleQuickfix = async () => {
+        setIsQuickfixLoading(true);
+        try {
+            // Debug logging
+            console.log('Debug - combinedResults:', combinedResults);
+            console.log('Debug - components:', components);
+            
+            // Use combinedResults first, then fall back to components state
+            const componentList = combinedResults.length > 0 ? combinedResults : components;
+            console.log('Sending componentList to stylebook-recommend:', componentList);
+            
+            if (componentList.length === 0) {
+                message.warning('No components available. Please generate components first.');
+                return;
+            }
+            
+            const response = await axios.post('http://localhost:3001/stylebook-recommend', {
+                userTask: userTask,
+                userName: globalUsername,
+                taskId: globalTaskId,
+                componentList: componentList
+            });
+            
+            const recommendations = response.data.recommendations || [];
+            
+            if (recommendations.length === 0) {
+                message.info('No stylebook recommendations available');
+                return;
+            }
+            
+            // Switch to quickfix mode
+            setIsQuickfixing(true);
+            setQuickfixRecommendations(recommendations);
+        } catch (error) {
+            console.error('Failed to get stylebook recommendations:', error);
+            message.error('Failed to get recommendations');
+        } finally {
+            setIsQuickfixLoading(false);
+        }
+    };
+
+    const handleAIRewrite = () => {
+        setIsRewriting(true);
+        setRewritePrompt('');
+        setNewContent('');
+    };
+
+    const handleExpand = async () => {
+        setIsExpandLoading(true);
+        try {
+            const response = await axios.post('http://localhost:3001/content-expand', {
+                userName: globalUsername,
+                taskId: globalTaskId,
+                selectedContent: component.content
+            });
+            
+            setExpandedContent(response.data.expandedContent);
+            setIsExpanding(true);
+        } catch (error) {
+            console.error('Failed to expand content:', error);
+            message.error('Failed to expand content');
+        } finally {
+            setIsExpandLoading(false);
+        }
+    };
+
+    const handleShorten = async () => {
+        setIsShortenLoading(true);
+        try {
+            const response = await axios.post('http://localhost:3001/content-shorten', {
+                userName: globalUsername,
+                taskId: globalTaskId,
+                selectedContent: component.content
+            });
+            
+            setShortenedContent(response.data.shortenedContent);
+            setIsShortening(true);
+        } catch (error) {
+            console.error('Failed to shorten content:', error);
+            message.error('Failed to shorten content');
+        } finally {
+            setIsShortenLoading(false);
+        }
+    };
+
+    const handleGenerateRewrite = async () => {
+        if (!rewritePrompt.trim()) {
+            message.warning('Please enter a rewrite prompt');
+            return;
+        }
+        
+        setIsRewriteLoading(true);
+        try {
+            const response = await axios.post('http://localhost:3001/ai-generate-rewrite', {
+                userTask: userTask,
+                userName: globalUsername,
+                taskId: globalTaskId,
+                selectedContent: component.content,
+                userPrompt: rewritePrompt
+            });
+            
+            setNewContent(response.data.rewrittenContent);
+        } catch (error) {
+            console.error('Failed to rewrite content:', error);
+            message.error('Failed to rewrite content');
+        } finally {
+            setIsRewriteLoading(false);
+        }
+    };
+
+    const handleApplyRewrite = async () => {
+        if (newContent) {
+            try {
+                // Get linkedIntents for this component
+                const combinedResult = combinedResults?.find(result => result.id === component.id);
+                const linkedIntents = combinedResult?.linkedIntents || [];
+                
+                // Update the editor value directly (same as handleApplyToSelectedComponent)
+                const newValue = value.map(node => {
+                    const nodeText = getNodeText(null, node);
+                    if (nodeText.includes(component.content)) {
+                        const updatedText = nodeText.replace(component.content, newContent);
+                        return {
+                            ...node,
+                            children: [{
+                                text: updatedText,
+                                highlight: true,
+                                componentId: component.id,
+                                hasDimensions: linkedIntents.length > 0,
+                                linkedIntents: linkedIntents
+                            }]
+                        };
+                    }
+                    return node;
+                });
+                
+                setValue(newValue);
+                setEditorKey(prev => prev + 1);
+
+                // Update component states
+                setComponents(prevComponents => 
+                    prevComponents.map(comp => 
+                        comp.id === component.id ? { ...comp, content: newContent } : comp
+                    )
+                );
+
+                // Update combinedResults
+                setCombinedResults(prevResults => 
+                    prevResults.map(comp => 
+                        comp.id === component.id 
+                            ? { ...comp, content: newContent }
+                            : comp
+                    )
+                );
+                
+                // Update components array (no need to update commonComponents as it's not used)
+                // The components state is already updated above
+
+                // Update originalText and save to draft
+                const updatedText = originalText.replace(component.content, newContent);
+                setOriginalText(updatedText);
+                
+                await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
+                    content: updatedText
+                });
+                
+                // Track this modification for potential modal display
+                if (typeof setLastModifiedComponent === 'function') {
+                    setLastModifiedComponent({
+                        componentId: component.id,
+                        oldContent: component.content,
+                        newContent: newContent
+                    });
+                }
+                
+                setIsRewriting(false);
+                onClose();
+                
+                message.success('Content applied and saved successfully');
+            } catch (error) {
+                console.error('Failed to apply rewrite:', error);
+                message.error('Failed to save changes');
+            }
+        }
+    };
+
+    const handleSave = () => {
+        onReplace(component.id, editText);
+        setIsEditing(false);
+        onClose();
+    };
+
+    const handleCancel = () => {
+        setEditText(component.content);
+        setIsEditing(false);
+    };
+
+    const handleCancelRewrite = () => {
+        setIsRewriting(false);
+        setRewritePrompt('');
+        setNewContent('');
+    };
+
+    const handleApplyExpand = async () => {
+        if (expandedContent) {
+            try {
+                // Get linkedIntents for this component
+                const combinedResult = combinedResults?.find(result => result.id === component.id);
+                const linkedIntents = combinedResult?.linkedIntents || [];
+                
+                // Update the editor value directly (same as handleApplyRewrite)
+                const newValue = value.map(node => {
+                    const nodeText = getNodeText(null, node);
+                    if (nodeText.includes(component.content)) {
+                        const updatedText = nodeText.replace(component.content, expandedContent);
+                        return {
+                            ...node,
+                            children: [{
+                                text: updatedText,
+                                highlight: true,
+                                componentId: component.id,
+                                hasDimensions: linkedIntents.length > 0,
+                                linkedIntents: linkedIntents
+                            }]
+                        };
+                    }
+                    return node;
+                });
+                
+                setValue(newValue);
+                setEditorKey(prev => prev + 1);
+
+                // Update component states
+                setComponents(prevComponents => 
+                    prevComponents.map(comp => 
+                        comp.id === component.id ? { ...comp, content: expandedContent } : comp
+                    )
+                );
+
+                // Update combinedResults
+                setCombinedResults(prevResults => 
+                    prevResults.map(comp => 
+                        comp.id === component.id 
+                            ? { ...comp, content: expandedContent }
+                            : comp
+                    )
+                );
+
+                // Update originalText and save to draft
+                const updatedText = originalText.replace(component.content, expandedContent);
+                setOriginalText(updatedText);
+                
+                await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
+                    content: updatedText
+                });
+                
+                // Track this modification for potential modal display
+                if (typeof setLastModifiedComponent === 'function') {
+                    setLastModifiedComponent({
+                        componentId: component.id,
+                        oldContent: component.content,
+                        newContent: expandedContent
+                    });
+                }
+                
+                setIsExpanding(false);
+                onClose();
+                
+                message.success('Content expanded and saved successfully');
+            } catch (error) {
+                console.error('Failed to apply expand:', error);
+                message.error('Failed to save changes');
+            }
+        }
+    };
+
+    const handleCancelExpand = () => {
+        setIsExpanding(false);
+        setExpandedContent('');
+    };
+
+    const handleApplyShorten = async () => {
+        if (shortenedContent) {
+            try {
+                // Get linkedIntents for this component
+                const combinedResult = combinedResults?.find(result => result.id === component.id);
+                const linkedIntents = combinedResult?.linkedIntents || [];
+                
+                // Update the editor value directly (same as handleApplyExpand)
+                const newValue = value.map(node => {
+                    const nodeText = getNodeText(null, node);
+                    if (nodeText.includes(component.content)) {
+                        const updatedText = nodeText.replace(component.content, shortenedContent);
+                        return {
+                            ...node,
+                            children: [{
+                                text: updatedText,
+                                highlight: true,
+                                componentId: component.id,
+                                hasDimensions: linkedIntents.length > 0,
+                                linkedIntents: linkedIntents
+                            }]
+                        };
+                    }
+                    return node;
+                });
+                
+                setValue(newValue);
+                setEditorKey(prev => prev + 1);
+
+                // Update component states
+                setComponents(prevComponents => 
+                    prevComponents.map(comp => 
+                        comp.id === component.id ? { ...comp, content: shortenedContent } : comp
+                    )
+                );
+
+                // Update combinedResults
+                setCombinedResults(prevResults => 
+                    prevResults.map(comp => 
+                        comp.id === component.id 
+                            ? { ...comp, content: shortenedContent }
+                            : comp
+                    )
+                );
+
+                // Update originalText and save to draft
+                const updatedText = originalText.replace(component.content, shortenedContent);
+                setOriginalText(updatedText);
+                
+                await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
+                    content: updatedText
+                });
+                
+                // Track this modification for potential modal display
+                if (typeof setLastModifiedComponent === 'function') {
+                    setLastModifiedComponent({
+                        componentId: component.id,
+                        oldContent: component.content,
+                        newContent: shortenedContent
+                    });
+                }
+                
+                setIsShortening(false);
+                onClose();
+                
+                message.success('Content shortened and saved successfully');
+            } catch (error) {
+                console.error('Failed to apply shorten:', error);
+                message.error('Failed to save changes');
+            }
+        }
+    };
+
+    const handleCancelShorten = () => {
+        setIsShortening(false);
+        setShortenedContent('');
+    };
+
+    const handleApplyQuickfix = async () => {
+        if (selectedRecommendation) {
+            try {
+                // Get linkedIntents for this component
+                const combinedResult = combinedResults?.find(result => result.id === component.id);
+                const linkedIntents = combinedResult?.linkedIntents || [];
+                
+                // Update the editor value directly (same as handleApplyRewrite)
+                const newValue = value.map(node => {
+                    const nodeText = getNodeText(null, node);
+                    if (nodeText.includes(component.content)) {
+                        const updatedText = nodeText.replace(component.content, selectedRecommendation.recommended_revision);
+                        return {
+                            ...node,
+                            children: [{
+                                text: updatedText,
+                                highlight: true,
+                                componentId: component.id,
+                                hasDimensions: linkedIntents.length > 0,
+                                linkedIntents: linkedIntents
+                            }]
+                        };
+                    }
+                    return node;
+                });
+                
+                setValue(newValue);
+                setEditorKey(prev => prev + 1);
+
+                // Update component states
+                setComponents(prevComponents => 
+                    prevComponents.map(comp => 
+                        comp.id === component.id ? { ...comp, content: selectedRecommendation.recommended_revision } : comp
+                    )
+                );
+
+                // Update combinedResults
+                setCombinedResults(prevResults => 
+                    prevResults.map(comp => 
+                        comp.id === component.id 
+                            ? { ...comp, content: selectedRecommendation.recommended_revision }
+                            : comp
+                    )
+                );
+                
+                // Update components array (no need to update commonComponents as it's not used)
+                // The components state is already updated above
+
+                // Update originalText and save to draft
+                const updatedText = originalText.replace(component.content, selectedRecommendation.recommended_revision);
+                setOriginalText(updatedText);
+                
+                await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
+                    content: updatedText
+                });
+                
+                // Track this modification for potential modal display
+                if (typeof setLastModifiedComponent === 'function') {
+                    setLastModifiedComponent({
+                        componentId: component.id,
+                        oldContent: component.content,
+                        newContent: selectedRecommendation.recommended_revision
+                    });
+                }
+                
+                setIsQuickfixing(false);
+                onClose();
+                
+                message.success('Quickfix applied and saved successfully');
+            } catch (error) {
+                console.error('Failed to apply quickfix:', error);
+                message.error('Failed to save changes');
+            }
+        }
+    };
+
+    const handleCancelQuickfix = () => {
+        setIsQuickfixing(false);
+        setQuickfixRecommendations([]);
+        setSelectedRecommendation(null);
+    };
+
+    // Function button style
+    const buttonStyle = {
+        padding: '6px 12px',
+        border: 'none',
+        background: 'transparent',
+        cursor: 'pointer',
+        borderRadius: '4px',
+        fontSize: '12px',
+        color: '#666',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        transition: 'all 0.2s',
+        minWidth: '60px',
+        justifyContent: 'center'
+    };
+
+    const buttonHoverStyle = {
+        ...buttonStyle,
+        background: '#f5f5f5',
+        color: '#333'
+    };
+
+    return (
+        <div
+            style={{
+                position: 'absolute',
+                top: position.top - 60,
+                left: position.left,
+                background: 'white',
+                border: '1px solid #e0e0e0',
+                borderRadius: '8px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                zIndex: 1000,
+                overflow: 'hidden'
+            }}
+        >
+            {!isEditing && !isRewriting && !isQuickfixing && !isExpanding && !isShortening ? (
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <button
+                        style={buttonStyle}
+                        onMouseEnter={(e) => Object.assign(e.target.style, buttonHoverStyle)}
+                        onMouseLeave={(e) => Object.assign(e.target.style, buttonStyle)}
+                        onClick={handleEdit}
+                        title="Edit"
+                    >
+                        ✏️ Edit
+                    </button>
+                    
+                    <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
+                    
+                    <button
+                        style={buttonStyle}
+                        onMouseEnter={(e) => Object.assign(e.target.style, buttonHoverStyle)}
+                        onMouseLeave={(e) => Object.assign(e.target.style, buttonStyle)}
+                        onClick={handleQuickfix}
+                        title="Quickfix"
+                        disabled={isQuickfixLoading}
+                    >
+                        {isQuickfixLoading ? '⏳ Loading...' : '✨ Quickfix'}
+                    </button>
+                    
+                    <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
+                    
+                    <button
+                        style={buttonStyle}
+                        onMouseEnter={(e) => Object.assign(e.target.style, buttonHoverStyle)}
+                        onMouseLeave={(e) => Object.assign(e.target.style, buttonStyle)}
+                        onClick={handleAIRewrite}
+                        title="AI Rewrite"
+                    >
+                        🔄 AI Rewrite
+                    </button>
+                    
+                    <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
+                    
+                    <button
+                        style={buttonStyle}
+                        onMouseEnter={(e) => Object.assign(e.target.style, buttonHoverStyle)}
+                        onMouseLeave={(e) => Object.assign(e.target.style, buttonStyle)}
+                        onClick={handleExpand}
+                        title="Expand"
+                        disabled={isExpandLoading}
+                    >
+                        {isExpandLoading ? '⏳ Loading...' : '📈 Expand'}
+                    </button>
+                    
+                    <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
+                    
+                    <button
+                        style={buttonStyle}
+                        onMouseEnter={(e) => Object.assign(e.target.style, buttonHoverStyle)}
+                        onMouseLeave={(e) => Object.assign(e.target.style, buttonStyle)}
+                        onClick={handleShorten}
+                        title="Shorten"
+                        disabled={isShortenLoading}
+                    >
+                        {isShortenLoading ? '⏳ Loading...' : '📉 Shorten'}
+                    </button>
+                    
+                    <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
+                    
+                    <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
+                    
+                    <button
+                        style={buttonStyle}
+                        onMouseEnter={(e) => Object.assign(e.target.style, buttonHoverStyle)}
+                        onMouseLeave={(e) => Object.assign(e.target.style, buttonStyle)}
+                        onClick={onClose}
+                        title="Close"
+                    >
+                        ✕
+                    </button>
+                </div>
+            ) : isEditing ? (
+                <div style={{ padding: '12px', minWidth: '300px' }}>
+                    <textarea
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        style={{
+                            width: '100%',
+                            minHeight: '80px',
+                            marginBottom: '8px',
+                            padding: '8px',
+                            border: '1px solid #d9d9d9',
+                            borderRadius: '4px',
+                            resize: 'vertical',
+                            fontSize: '13px',
+                            fontFamily: 'inherit'
+                        }}
+                        placeholder="Edit component content..."
+                        autoFocus
+                    />
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <Button size="small" onClick={handleCancel}>
+                            Cancel
+                        </Button>
+                        <Button size="small" type="primary" onClick={handleSave}>
+                            Save
+                        </Button>
+                    </div>
+                </div>
+            ) : isQuickfixing ? (
+                <div style={{ padding: '12px', minWidth: '600px', maxWidth: '1000px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px', color: '#333' }}>
+                        Stylebook Recommendations
+                    </div>
+                    
+                    <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Current Content:</div>
+                        <div style={{
+                            padding: '8px',
+                            background: '#f5f5f5',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            lineHeight: '1.5',
+                            maxHeight: '80px',
+                            overflow: 'auto'
+                        }}>
+                            {component.content}
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>Select a recommendation:</div>
+                        <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '8px' }}>
+                            {quickfixRecommendations.map((rec, index) => (
+                                <div
+                                    key={index}
+                                    onClick={() => setSelectedRecommendation(rec)}
+                                    style={{
+                                        minWidth: '180px',
+                                        maxWidth: '400px',
+                                        padding: '12px',
+                                        border: selectedRecommendation === rec ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        background: selectedRecommendation === rec ? '#f0f9ff' : '#fff',
+                                        flexShrink: 0,
+                                        textAlign: 'center'
+                                    }}
+                                >
+                                    <img 
+                                        src={stylebookSVG} 
+                                        alt="Stylebook" 
+                                        style={{ width: '100px', height: '80px', marginBottom: '8px' }}
+                                    />
+                                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1890ff', marginBottom: '8px', textAlign: 'left' }}>
+                                        {rec.stylebook_reference}
+                                    </div>
+                                    <div style={{ fontSize: '13px', lineHeight: '1.4', textAlign: 'left', marginBottom: '12px' }}>
+                                        {rec.recommended_revision}
+                                    </div>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setDetailsModal({ visible: true, recommendation: rec });
+                                        }}
+                                        style={{
+                                            background: 'none',
+                                            border: '1px solid #d9d9d9',
+                                            borderRadius: '4px',
+                                            padding: '4px 8px',
+                                            fontSize: '10px',
+                                            color: '#666',
+                                            cursor: 'pointer',
+                                            display: 'block',
+                                            margin: '0 auto'
+                                        }}
+                                    >
+                                        View Details
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid #e0e0e0', paddingTop: '12px' }}>
+                        <Button size="small" onClick={handleCancelQuickfix}>
+                            Cancel
+                        </Button>
+                        <Button 
+                            size="small" 
+                            type="primary" 
+                            onClick={handleApplyQuickfix}
+                            disabled={!selectedRecommendation}
+                        >
+                            Apply
+                        </Button>
+                    </div>
+                </div>
+            ) : isExpanding ? (
+                <div style={{ padding: '12px', minWidth: '400px', maxWidth: '600px' }}>
+                    <div style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 'bold' }}>Content Expansion</div>
+                    
+                    <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Original Content:</div>
+                        <div style={{ 
+                            padding: '8px', 
+                            background: '#f5f5f5', 
+                            borderRadius: '4px', 
+                            fontSize: '12px',
+                            maxHeight: '100px',
+                            overflow: 'auto'
+                        }}>
+                            {component.content}
+                        </div>
+                    </div>
+                    
+                    <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Expanded Content:</div>
+                        <div style={{ 
+                            padding: '8px', 
+                            background: '#e6f7ff', 
+                            borderRadius: '4px', 
+                            fontSize: '12px',
+                            maxHeight: '150px',
+                            overflow: 'auto'
+                        }}>
+                            {expandedContent}
+                        </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                            onClick={handleCancelExpand}
+                            style={{
+                                padding: '6px 12px',
+                                border: '1px solid #d9d9d9',
+                                background: 'white',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px'
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleApplyExpand}
+                            style={{
+                                padding: '6px 12px',
+                                border: 'none',
+                                background: '#1890ff',
+                                color: 'white',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px'
+                            }}
+                        >
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            ) : isShortening ? (
+                <div style={{ padding: '12px', minWidth: '400px', maxWidth: '600px' }}>
+                    <div style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 'bold' }}>Content Shortening</div>
+                    
+                    <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Original Content:</div>
+                        <div style={{ 
+                            padding: '8px', 
+                            background: '#f5f5f5', 
+                            borderRadius: '4px', 
+                            fontSize: '12px',
+                            maxHeight: '100px',
+                            overflow: 'auto'
+                        }}>
+                            {component.content}
+                        </div>
+                    </div>
+                    
+                    <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Shortened Content:</div>
+                        <div style={{ 
+                            padding: '8px', 
+                            background: '#fff2e8', 
+                            borderRadius: '4px', 
+                            fontSize: '12px',
+                            maxHeight: '150px',
+                            overflow: 'auto'
+                        }}>
+                            {shortenedContent}
+                        </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                            onClick={handleCancelShorten}
+                            style={{
+                                padding: '6px 12px',
+                                border: '1px solid #d9d9d9',
+                                background: 'white',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px'
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleApplyShorten}
+                            style={{
+                                padding: '6px 12px',
+                                border: 'none',
+                                background: '#1890ff',
+                                color: 'white',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px'
+                            }}
+                        >
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div style={{ padding: '12px', minWidth: '400px', maxWidth: '500px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px', color: '#333' }}>
+                        AI Rewrite
+                    </div>
+                    
+                    <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Current Content:</div>
+                        <div style={{
+                            padding: '8px',
+                            background: '#f5f5f5',
+                            borderRadius: '4px',
+                            fontSize: '13px',
+                            lineHeight: '1.4',
+                            maxHeight: '80px',
+                            overflow: 'auto'
+                        }}>
+                            {component.content}
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Rewrite Prompt:</div>
+                        <Input.TextArea
+                            value={rewritePrompt}
+                            onChange={(e) => setRewritePrompt(e.target.value)}
+                            placeholder="Enter your rewrite instructions (e.g., 'Make it more formal', 'Shorten this', 'Add more details')..."
+                            rows={2}
+                            style={{ fontSize: '13px' }}
+                        />
+                        <div style={{ marginTop: '8px', textAlign: 'right' }}>
+                            <Button 
+                                size="small" 
+                                type="primary" 
+                                onClick={handleGenerateRewrite}
+                                loading={isRewriteLoading}
+                                disabled={!rewritePrompt.trim()}
+                            >
+                                Rewrite
+                            </Button>
+                        </div>
+                    </div>
+
+                    {newContent && (
+                        <div style={{ marginBottom: '12px' }}>
+                            <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>New Content:</div>
+                            <div style={{
+                                padding: '8px',
+                                background: '#f0f9ff',
+                                border: '1px solid #bae6fd',
+                                borderRadius: '4px',
+                                fontSize: '13px',
+                                lineHeight: '1.4',
+                                maxHeight: '120px',
+                                overflow: 'auto'
+                            }}>
+                                {newContent}
+                            </div>
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid #e0e0e0', paddingTop: '12px' }}>
+                        <Button size="small" onClick={handleCancelRewrite}>
+                            Cancel
+                        </Button>
+                        <Button 
+                            size="small" 
+                            type="primary" 
+                            onClick={handleApplyRewrite}
+                            disabled={!newContent}
+                        >
+                            Apply
+                        </Button>
+                    </div>
+                </div>
+            )}
+            
+            <Modal
+                title="Stylebook Details"
+                open={detailsModal.visible}
+                onCancel={() => setDetailsModal({ visible: false, recommendation: null })}
+                footer={[
+                    <Button key="back" onClick={() => setDetailsModal({ visible: false, recommendation: null })}>
+                        Back
+                    </Button>
+                ]}
+                width={1000}
+            >
+                {detailsModal.recommendation && (
+                    <DetailsModalContent 
+                        recommendation={detailsModal.recommendation} 
+                        globalTaskId={globalTaskId}
+                        globalUsername={globalUsername}
+                    />
+                )}
+            </Modal>
+        </div>
+    );
+};
+
+// Details Modal Content Component
+const DetailsModalContent = ({ recommendation, globalTaskId, globalUsername }) => {
+    const [stylebookData, setStylebookData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchStylebookData = async () => {
+            try {
+                const response = await axios.get(`http://localhost:3001/user-data/${globalUsername}/AdaptiveStylebook/AdaptiveStylebook.json`);
+                const stylebook = response.data;
+                const matchingRecord = stylebook.revision_records?.find(record => 
+                    record.modification_name === recommendation.stylebook_reference ||
+                    record.modification_name.toLowerCase().includes(recommendation.stylebook_reference.toLowerCase()) ||
+                    recommendation.stylebook_reference.toLowerCase().includes(record.modification_name.toLowerCase())
+                );
+                setStylebookData(matchingRecord);
+            } catch (error) {
+                console.error('Failed to load stylebook details:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchStylebookData();
+    }, [recommendation, globalUsername]);
+
+    if (loading) {
+        return <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>;
+    }
+
+    return (
+        <div>
+            <div style={{ marginBottom: '20px', padding: '12px', background: '#f0f9ff', borderRadius: '6px' }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#1890ff' }}>Revision Reason</h4>
+                <p style={{ margin: 0, lineHeight: '1.5' }}>
+                    {recommendation.revision_reason || 'No revision reason provided'}
+                </p>
+            </div>
+            
+            <div style={{ padding: '12px', background: '#f9f9f9', borderRadius: '6px' }}>
+                <h4 style={{ margin: '0 0 12px 0', color: '#333' }}>Stylebook Information</h4>
+                {stylebookData ? (
+                    <div style={{ fontSize: '13px', lineHeight: '1.6' }}>
+                        <div style={{ marginBottom: '12px' }}>
+                            <strong>Modification Name:</strong>
+                            <div style={{ marginTop: '4px', padding: '8px', background: '#fff', borderRadius: '4px' }}>
+                                {stylebookData.modification_name}
+                            </div>
+                        </div>
+                        
+                        <div style={{ marginBottom: '12px' }}>
+                            <strong>Original Text:</strong>
+                            <div style={{ marginTop: '4px', padding: '8px', background: '#fff', borderRadius: '4px' }}>
+                                {stylebookData.original_text}
+                            </div>
+                        </div>
+                        
+                        <div style={{ marginBottom: '12px' }}>
+                            <strong>Revised Text:</strong>
+                            <div style={{ marginTop: '4px', padding: '8px', background: '#fff', borderRadius: '4px' }}>
+                                {stylebookData.revised_text}
+                            </div>
+                        </div>
+                        
+                        <div style={{ marginBottom: '12px' }}>
+                            <strong>Modification Reason:</strong>
+                            <div style={{ marginTop: '4px', padding: '8px', background: '#fff', borderRadius: '4px' }}>
+                                {stylebookData.modification_reason}
+                            </div>
+                        </div>
+                        
+                        <div style={{ marginBottom: '12px' }}>
+                            <strong>Receiver Description:</strong>
+                            <div style={{ marginTop: '4px', padding: '8px', background: '#fff', borderRadius: '4px' }}>
+                                {stylebookData.receiver_description}
+                            </div>
+                        </div>
+                        
+                        <div style={{ marginBottom: '0' }}>
+                            <strong>Occasion Description:</strong>
+                            <div style={{ marginTop: '4px', padding: '8px', background: '#fff', borderRadius: '4px' }}>
+                                {stylebookData.occasion_description}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <p style={{ color: '#666', fontStyle: 'italic' }}>
+                        No detailed stylebook information found for "{recommendation.stylebook_reference}"
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// Toolbar Button Component
+const ToolbarButton = ({ format, children, isActive, onMouseDown }) => {
+    return (
+        <button
+            onMouseDown={onMouseDown}
+            style={{
+                padding: '8px 12px',
+                border: '1px solid #d9d9d9',
+                background: isActive ? '#1890ff' : '#fff',
+                color: isActive ? '#fff' : '#000',
+                cursor: 'pointer',
+                borderRadius: '4px',
+                marginRight: '4px',
+                fontSize: '14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                minWidth: '32px',
+                justifyContent: 'center',
+            }}
+        >
+            {children}
+        </button>
+    );
+};
+
+// Toolbar Component
+const Toolbar = () => {
+    const editor = useSlate();
+
+    return (
+        <div style={{
+            padding: '8px',
+            borderBottom: '1px solid #d9d9d9',
+            background: '#fafafa',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px',
+        }}>
+            {/* Text formatting buttons */}
+            <ToolbarButton
+                format="bold"
+                isActive={isFormatActive(editor, 'bold')}
+                onMouseDown={(event) => {
+                    event.preventDefault();
+                    toggleFormat(editor, 'bold');
+                }}
+            >
+                <strong>B</strong>
+            </ToolbarButton>
+            
+            <ToolbarButton
+                format="italic"
+                isActive={isFormatActive(editor, 'italic')}
+                onMouseDown={(event) => {
+                    event.preventDefault();
+                    toggleFormat(editor, 'italic');
+                }}
+            >
+                <em>I</em>
+            </ToolbarButton>
+            
+            <ToolbarButton
+                format="underline"
+                isActive={isFormatActive(editor, 'underline')}
+                onMouseDown={(event) => {
+                    event.preventDefault();
+                    toggleFormat(editor, 'underline');
+                }}
+            >
+                <u>U</u>
+            </ToolbarButton>
+
+            <div style={{ width: '1px', height: '24px', background: '#d9d9d9', margin: '0 8px' }} />
+
+            {/* Block element buttons */}
+            <ToolbarButton
+                format="heading-one"
+                isActive={isBlockActive(editor, 'heading-one')}
+                onMouseDown={(event) => {
+                    event.preventDefault();
+                    toggleBlock(editor, 'heading-one');
+                }}
+            >
+                H1
+            </ToolbarButton>
+            
+            <ToolbarButton
+                format="heading-two"
+                isActive={isBlockActive(editor, 'heading-two')}
+                onMouseDown={(event) => {
+                    event.preventDefault();
+                    toggleBlock(editor, 'heading-two');
+                }}
+            >
+                H2
+            </ToolbarButton>
+
+            <div style={{ width: '1px', height: '24px', background: '#d9d9d9', margin: '0 8px' }} />
+
+            {/* List buttons */}
+            <ToolbarButton
+                format="bulleted-list"
+                isActive={isBlockActive(editor, 'bulleted-list')}
+                onMouseDown={(event) => {
+                    event.preventDefault();
+                    toggleBlock(editor, 'bulleted-list');
+                }}
+            >
+                • List
+            </ToolbarButton>
+            
+            <ToolbarButton
+                format="numbered-list"
+                isActive={isBlockActive(editor, 'numbered-list')}
+                onMouseDown={(event) => {
+                    event.preventDefault();
+                    toggleBlock(editor, 'numbered-list');
+                }}
+            >
+                1. List
+            </ToolbarButton>
+        </div>
+    );
+};
     // Close floating toolbar
     const closeFloatingToolbar = () => {
         setFloatingToolbar({ visible: false, component: null, position: null });
@@ -1183,6 +2316,7 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                                         cursor: 'pointer'
                                     }}
                                     onClick={(e) => {
+                                        e.preventDefault();
                                         e.stopPropagation();
                                         handleDimensionClick(intent, leaf.componentId);
                                     }}
@@ -1212,6 +2346,11 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
     const handleDimensionClick = (intent, componentId) => {
         console.log('Dimension clicked:', intent.dimension, 'for component:', componentId);
         
+        // 如果toolbar还显示，则关闭它
+        if (floatingToolbar.visible) {
+            closeFloatingToolbar();
+        }
+        
         // 查找对应的组件
         const component = components.find(c => c.id === componentId);
         if (!component) {
@@ -1227,9 +2366,20 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
             )
         );
 
-        // 如果已经选中且高亮，则不执行任何操作
+        // 如枟已经选中且高亮，则不执行任何操作
         if (isCurrentlySelected && isCurrentlyHighlighted) {
             console.log('Component already selected and highlighted, no action needed');
+            return;
+        }
+
+        // Check if there was a previous modification and show modal
+        if (lastModifiedComponent && lastModifiedComponent.componentId !== componentId) {
+            setChangeModal({
+                visible: true,
+                oldContent: lastModifiedComponent.oldContent,
+                newContent: lastModifiedComponent.newContent,
+                componentId: lastModifiedComponent.componentId
+            });
             return;
         }
 
@@ -1350,7 +2500,70 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
         // Clear preview content
         setPreviewContent('');
         
+        // Track this modification for potential modal display
+        setLastModifiedComponent({
+            componentId: selectedComponentId,
+            oldContent: selectedComponent.content,
+            newContent: previewContent
+        });
+        
         message.success('Component content updated successfully');
+    };
+
+    // Modal handlers
+    const handleModalSave = async () => {
+        console.log('Saving modification with reason:', modificationReason);
+        
+        try {
+            // Find the component details
+            const component = components.find(c => c.id === changeModal.componentId);
+            if (!component) {
+                message.error('Component not found');
+                return;
+            }
+
+            // Prepare component data
+            const componentBeforeEdit = {
+                id: component.id,
+                title: component.title,
+                content: changeModal.oldContent
+            };
+
+            const componentAfterEdit = {
+                id: component.id,
+                title: component.title,
+                content: changeModal.newContent
+            };
+
+            // Call the API
+            const response = await axios.post('http://localhost:3001/save-manual-edit-tool', {
+                userTask: userTask,
+                userName: globalUsername,
+                taskId: globalTaskId,
+                userEditReason: modificationReason,
+                componentBeforeEdit: componentBeforeEdit,
+                componentAfterEdit: componentAfterEdit
+            });
+
+            console.log('Manual edit analysis response:', response.data);
+            
+            setChangeModal({ visible: false, oldContent: '', newContent: '', componentId: null });
+            setModificationReason('');
+            setLastModifiedComponent(null);
+            
+            message.success('Modification saved successfully');
+        } catch (error) {
+            console.error('Error saving manual edit:', error);
+            message.error('Failed to save modification');
+        }
+    };
+
+    const handleModalCancel = () => {
+        setChangeModal({ visible: false, oldContent: '', newContent: '', componentId: null });
+        setModificationReason('');
+        // Keep lastModifiedComponent for potential future modal display
+        
+        message.info('Modification cancelled');
     };
 
     // Add state update logic and debugging logs to handleRadioChange
@@ -1487,14 +2700,30 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
         }
     };
 
-    // Save draft function
+    // Save draft function - extract current editor content and save
     const handleSaveDraft = async () => {
-        const draftLatest = originalText; // Use the original text with updates
-
         try {
+            // Extract current text content from editor
+            const currentContent = value.map(node => {
+                return getNodeText(null, node);
+            }).join('\n\n');
+            
+            // Update originalText with current editor content
+            setOriginalText(currentContent);
+            
+            // Save to drafts/latest.md
             await axios.post(`http://localhost:3001/sessiondata/${globalTaskId}/drafts/latest.md`, {
-                content: draftLatest,
+                content: currentContent,
             });
+            
+            // Clear component-related states
+            setComponents([]);
+            setCombinedResults([]);
+            setSelectedComponentId(null);
+            
+            // Clear any highlighting or markers
+            clearAllMarkers();
+            
             message.success('Draft saved successfully.');
         } catch (error) {
             console.error('Error saving draft:', error);
@@ -1582,18 +2811,25 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
 
     return (
         <div
+            className='emailEditor'
             style={{
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100vh',
-                background: '#f5f5f5',
-                position: 'relative',
+                height: '100%',
+                overflow: 'auto !important'
             }}
         >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div
+            style={{
+                height: '100%',
+                overflow: 'auto',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+            }}
+        >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexShrink: 0 }}>
                 <div style={{ fontSize: '24px', fontWeight: 'bold' }}>Email Draft Editor</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button>Regenerate Draft</Button>
+                    <Button onClick={handleRegenerateDraft} loading={regenerateLoading}>Regenerate Draft</Button>
                     <Button
                         onClick={handleSaveDraft}
                     >
@@ -1605,34 +2841,42 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                     <Button onClick={removeAllHighlighting}>
                         Clear Highlighting
                     </Button>
-                    <Button type="primary">Generate Anchors</Button>
+                    <Button type="primary" onClick={handleGenerateAnchors} loading={anchorLoading}>Generate Anchors</Button>
                 </div>
             </div>
             
             <Card
+            className="email-editor-card"
                 size="small"
                 style={{
-                    height: '100%',
+                    flex: 1,
+                    minHeight: 0,
                     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                    overflow:'auto !important'
                 }}
                 bodyStyle={{
                     padding: 0,
                     height: '100%',
-                    overflow: 'auto'
+                    display: 'flex',
+                    flexDirection: 'column'
                 }}
             >
                 {contentLoaded ? (
                     <div>
-                    <Row style={{ height: '80%', borderBottom: '1px solid #d9d9d9'}}>
-                        <Col span={18}>
+                    <Row style={{ 
+                        borderBottom: '1px solid #d9d9d9',
+                        height: '500px',
+                        overflow: 'auto'
+                    }}>
+                        <Col span={18} style={{ height: '100%' }}>
                             <div 
                                 ref={editorRef}
                                 style={{
                                     background: '#fff',
-                                    height: '100%',
                                     position: 'relative',
                                     display: 'flex',
                                     flexDirection: 'column',
+                                    height: '100%'
                                 }}
                             >
                                 <Slate
@@ -1642,7 +2886,11 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                                     onChange={(newValue) => setValue(newValue)}
                                 >
                                     <Toolbar />
-                                    <div style={{ flex: 1, overflow: 'auto' }}>
+                                    <div style={{ 
+                                        flex: 1, 
+                                        overflow: 'auto',
+                                        maxHeight: 'calc(60vh - 50px)'
+                                    }}>
                                         <Editable
                                             renderElement={renderElement}
                                             renderLeaf={renderLeaf}
@@ -1650,7 +2898,7 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                                             placeholder={loading ? 'Loading...' : 'Start typing...'}
                                             style={{
                                                 padding: '16px',
-                                                minHeight: '500px',
+                                                minHeight: '400px',
                                                 outline: 'none',
                                                 lineHeight: '2.0',
                                             }}
@@ -1665,20 +2913,32 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                                         onReplace={handleComponentReplace}
                                         onClose={closeFloatingToolbar}
                                         position={floatingToolbar.position}
+                                        value={value}
+                                        setValue={setValue}
+                                        setEditorKey={setEditorKey}
+                                        combinedResults={combinedResults}
+                                        setCombinedResults={setCombinedResults}
+                                        setComponents={setComponents}
+                                        originalText={originalText}
+                                        setOriginalText={setOriginalText}
+                                        components={components}
+                                        globalTaskId={globalTaskId}
+                                        getNodeText={getNodeText}
+                                        setLastModifiedComponent={setLastModifiedComponent}
                                     />
                                 )}
                             </div>
                         </Col>
                         
-                        <Col span={6}>
+                        <Col span={6} style={{ height: '100%' }}>
                             <div 
                                 style={{
                                     padding: '16px',
-                                    height: '100%',
                                     borderLeft: '1px solid #f0f0f0',
                                     background: '#fff',
                                     display: 'flex',
                                     flexDirection: 'column',
+                                    height: '100%'
                                 }}
                             >
                                 <div style={{ 
@@ -1690,7 +2950,11 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                                     Email Components ({components.length})
                                 </div>
                                 
-                                <div style={{ flex: 1, overflowY: 'auto' }}>
+                                <div style={{
+                                    flex: 1,
+                                    overflow: 'auto',
+                                    maxHeight: 'calc(60vh - 80px)'
+                                }}>
                                     {components.length === 0 ? (
                                         <div style={{ 
                                             color: '#999', 
@@ -1764,9 +3028,16 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                             </div>
                         </Col>
                     </Row>
-                    <Row style={{ height: '20%', overflow: 'auto' ,width:'100%'}}>
-                        <Col span={24}>
-                        <div style={{padding: '16px', display: 'flex'}}>
+                    <Row style={{width:'100%',height: '40%',overflow: 'auto'}}>
+                    <Col span={24} style={{ height: '100%' }}>
+                        {/* Header section - fixed height */}
+                        <div style={{
+                            padding: '8px 16px', 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            
+                            flexShrink: 0
+                        }}>
                             <div style={{fontWeight: 'bold', fontSize: '16px', marginRight: '16px'}}>Intents</div> 
                             <Button 
                                 size="small" 
@@ -1778,34 +3049,78 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                             >
                                 Apply to Selected Component
                             </Button>
-                            
                         </div>
-                        <div className='intentModificationPreview' style={{padding:'8px',margin:'0 16px', width:'100%', border:'1px solid #f0f0f0', backgroundColor:'#fafafa', borderRadius:'8px'}}>
-                            <p style={{fontWeight: '600'}}>Modification Preview:</p>
-                            <span className="intentModificationPreviewContent">{previewContent}</span>
-
+                        
+                        {/* Preview section - fixed height */}
+                        <div className='intentModificationPreview' style={{
+                            padding:'8px 16px',
+                            borderRadius:'8px',
+                            margin:'0 16px',
+                            backgroundColor:'#fafafa', 
+                            flexShrink: 0,
+                            minHeight: '60px',
+                            maxHeight: '120px',
+                            overflow: 'auto'
+                        }}>
+                            <p style={{fontWeight: '600', margin: '0 0 8px 0', fontSize: '14px'}}>Modification Preview:</p>
+                            <div className="intentModificationPreviewContent" style={{
+                                fontSize: '13px',
+                                lineHeight: '1.4',
+                                color: '#666'
+                            }}>
+                                {previewContent || 'No preview available'}
+                            </div>
                         </div>
-                        <div className='intentCards' style={{padding:'8px 16px'}}>
-                            <Flex wrap gap="small">
+                        
+                        {/* Scrollable cards section */}
+                        <div className='intentCards' style={{
+                            flex: 1,
+                            overflow: 'auto',
+                            padding: '8px 16px',
+                            height: '200px'
+                        }}>
+                            <div style={{ 
+                                display: 'flex', 
+                                flexWrap: 'wrap', 
+                                gap: '12px',
+                                alignItems: 'flex-start'
+                            }}>
                                 {selectedComponentId && combinedResults.length > 0 ? (
                                     combinedResults
                                         .find(component => component.id === selectedComponentId)?.linkedIntents
                                         .map((intent, i) => (
                                             <Card 
                                                 title={
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        
+                                                    <div style={{ 
+                                                        display: 'flex', 
+                                                        alignItems: 'center', 
+                                                        gap: '8px',
+                                                        fontSize: '14px',
+                                                        fontWeight: '600'
+                                                    }}>
                                                         {intent.dimension}
                                                     </div>
                                                 }
                                                 key={i}
-                                                style={{ borderTop: `6px solid ${getDimensionColor(intent.dimension)}` }}
+                                                size="small"
+                                                style={{ 
+                                                    borderTop: `4px solid ${getDimensionColor(intent.dimension)}`,
+                                                    minWidth: '220px',
+                                                    maxWidth: '280px',
+                                                    flex: '0 0 auto',
+                                                    marginBottom: '8px'
+                                                }}
                                                 onClick={(e) => {
-                                                    e.stopPropagation(); // 阻止卡片点击事件影响其他组件
+                                                    e.stopPropagation();
                                                 }}
                                             >
                                                 <Radio.Group
-                                                    style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                                                    style={{ 
+                                                        display: 'flex', 
+                                                        flexDirection: 'column', 
+                                                        gap: '8px',
+                                                        width: '100%'
+                                                    }}
                                                     value={intent.current_value}
                                                     onChange={(e) => {
                                                         e.stopPropagation();
@@ -1815,21 +3130,39 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                                                         e.stopPropagation();
                                                     }}
                                                 >
-                                                    <Radio value={intent.current_value}>{intent.current_value}</Radio>
+                                                    <Radio 
+                                                        value={intent.current_value}
+                                                        style={{ fontSize: '13px' }}
+                                                    >
+                                                        {intent.current_value}
+                                                    </Radio>
                                                     {intent.other_values.map((value, index) => (
-                                                        <Radio key={index} value={value}>{value}</Radio>
+                                                        <Radio 
+                                                            key={index} 
+                                                            value={value}
+                                                            style={{ fontSize: '13px' }}
+                                                        >
+                                                            {value}
+                                                        </Radio>
                                                     ))}
                                                 </Radio.Group>
                                             </Card>
                                         ))
                                 ) : (
-                                    <div style={{ color: '#999', fontStyle: 'italic', textAlign: 'center', marginTop: '20px', fontSize: '13px' }}>
+                                    <div style={{ 
+                                        color: '#999', 
+                                        fontStyle: 'italic', 
+                                        textAlign: 'center', 
+                                        width: '100%',
+                                        padding: '40px 20px',
+                                        fontSize: '14px' 
+                                    }}>
                                         No intents available. Select a component to view its intents.
                                     </div>
                                 )}
-                            </Flex>
+                            </div>
                         </div>
-                        </Col>
+                    </Col>
                     </Row>
                     </div>
                 ) : (
@@ -1848,6 +3181,56 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                     </div>
                 )}
             </Card>
+            
+            {/* Component Change Modal */}
+            <Modal
+                title="Component Modification Record"
+                open={changeModal.visible}
+                onCancel={handleModalCancel}
+                footer={[
+                    <Button key="cancel" onClick={handleModalCancel}>
+                        Cancel
+                    </Button>,
+                    <Button key="save" type="primary" onClick={handleModalSave}>
+                        Save
+                    </Button>
+                ]}
+                width={600}
+            >
+                <div style={{ marginBottom: '16px' }}>
+                    <Typography.Text strong>Old Content:</Typography.Text>
+                    <div style={{ 
+                        background: '#f5f5f5', 
+                        padding: '8px', 
+                        borderRadius: '4px', 
+                        marginTop: '4px',
+                        marginBottom: '12px'
+                    }}>
+                        {changeModal.oldContent}
+                    </div>
+                    
+                    <Typography.Text strong>New Content:</Typography.Text>
+                    <div style={{ 
+                        background: '#e6f7ff', 
+                        padding: '8px', 
+                        borderRadius: '4px', 
+                        marginTop: '4px',
+                        marginBottom: '16px'
+                    }}>
+                        {changeModal.newContent}
+                    </div>
+                    
+                    <Typography.Text strong>Modification Reason:</Typography.Text>
+                    <Input.TextArea
+                        value={modificationReason}
+                        onChange={(e) => setModificationReason(e.target.value)}
+                        placeholder="Please enter the reason for this modification..."
+                        rows={3}
+                        style={{ marginTop: '4px' }}
+                    />
+                </div>
+            </Modal>
+        </div>
         </div>
     );
 };

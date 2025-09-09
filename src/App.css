@@ -89,7 +89,7 @@ html, body {
   display: flex;
   background-color: #F8FAFC !important;
   width: 100%;
-  height: calc(100vh - 64px - 49px);
+  height: calc(100vh - 64px);
   padding: 0 !important;
   box-sizing: border-box;
   min-width: 0;
@@ -112,10 +112,16 @@ html, body {
   box-sizing: border-box;
   overflow: auto;
 }
-
+.emailEditor {
+  width: 100%;
+  height: calc(100vh - 64px-49px);
+  padding: 0;
+  box-sizing: border-box;
+  overflow: auto;
+}
 .page {
   width: 100%;
-  height: calc(100vh - 64px - 49px);
+  height: calc(100vh - 64px-49px);
   padding: 0;
   border: none;
   box-sizing: border-box;
