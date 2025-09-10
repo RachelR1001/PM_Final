@@ -2,7 +2,7 @@
 
 ## Clone the project from the repository
 
-```git clone https://github.com/sszhao74/sszhao74.github.io.git```
+```git clone 
 
 ## Open the project directory in your terminal
 ```cd personaMail```
