@@ -35,13 +35,9 @@ function getItem(label, key, icon, children) {
 
 const items = [
   getItem('Email Task', '1', <HomeOutlined />),
-  getItem('History Drafts', '2', <FileTextOutlined />),
-  getItem('Persona Anchors', 'sub1', <TeamOutlined />, [
-    // getItem('Tom', '3'),
-    // getItem('Bill', '4'),
-    // getItem('Alex', '5'),
-  ]),
-  getItem('Situation Anchors', 'sub2', <AppstoreOutlined />, [getItem('Team 1', '6'), getItem('Team 2', '8')]),
+  getItem('Email Editor', '2', <FileTextOutlined />),
+  getItem('Anchors', '3', <TeamOutlined />),
+  // getItem('Situation Anchors', 'sub2', <AppstoreOutlined />, [getItem('Team 1', '6'), getItem('Team 2', '8')]),
 ];
 
 // Create a context for global state

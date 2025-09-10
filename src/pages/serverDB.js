@@ -133,7 +133,7 @@ function downloadImage(url, filePath) {
 }
 
 app.post('/generate-and-save-images', async (req, res) => {
-    const { userName, personaAnchor, situationAnchor } = req.body;
+    const { userName, personaAnchor, situationAnchor, userTask, taskId } = req.body;
     
     if (!userName || !personaAnchor || !situationAnchor) {
         return res.status(400).json({ error: '缺少必要参数' });
@@ -174,8 +174,11 @@ app.post('/generate-and-save-images', async (req, res) => {
         const personaJsonPath = path.join(personaFolderPath, `PersonaAnchor${personaNumber}.json`);
         const situationJsonPath = path.join(situationFolderPath, `SituationAnchor${situationNumber}.json`);
         
-        fs.writeFileSync(personaJsonPath, JSON.stringify(personaAnchor, null, 2));
-        fs.writeFileSync(situationJsonPath, JSON.stringify(situationAnchor, null, 2));
+        const personaData = { ...personaAnchor, userTask, taskId };
+        const situationData = { ...situationAnchor, userTask, taskId };
+        
+        fs.writeFileSync(personaJsonPath, JSON.stringify(personaData, null, 2));
+        fs.writeFileSync(situationJsonPath, JSON.stringify(situationData, null, 2));
         
         res.json({
             success: true,

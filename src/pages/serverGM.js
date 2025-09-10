@@ -242,6 +242,11 @@ app.post('/create-session', (req, res) => {
     const taskPath = path.join(userPath, taskId);
 
     try {
+        // 确保 SessionData 根目录存在
+        if (!fs.existsSync(sessionDataPath)) {
+            fs.mkdirSync(sessionDataPath, { recursive: true });
+        }
+
         // 创建用户目录（如果不存在）
         if (!fs.existsSync(userPath)) {
             fs.mkdirSync(userPath, { recursive: true });
@@ -268,7 +273,7 @@ app.post('/create-session', (req, res) => {
         // 创建 AdaptiveStylebook.json 文件（如果不存在）
         const adaptiveStylebookJsonPath = path.join(adaptiveStylebookPath, 'AdaptiveStylebook.json');
         if (!fs.existsSync(adaptiveStylebookJsonPath)) {
-            const adaptiveStylebookContent = {};
+            const adaptiveStylebookContent = { revision_records: [] };
             fs.writeFileSync(adaptiveStylebookJsonPath, JSON.stringify(adaptiveStylebookContent, null, 2));
         }
 
@@ -394,6 +399,68 @@ app.post('/generate-first-draft', async (req, res) => {
   }
 });
 
+app.post('/generate-anchor-email-draft', async (req, res) => {
+  const { userTask, factorChoices, userName } = req.body;
+
+  if (!userTask || !factorChoices || !userName) {
+    return res.status(400).json({ error: 'userTask, factorChoices, and userName are required' });
+  }
+
+  const promptPath = path.join(__dirname, '../../public/data/Prompts/4.2Anchor_first_draft_composer.prompt.md');
+  let promptTemplate;
+
+  try {
+    promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+  } catch (error) {
+    console.error('Failed to load 4.2Anchor_first_draft_composer.prompt.md:', error);
+    return res.status(500).json({ error: 'Failed to load prompt template' });
+  }
+
+  try {
+    // Get all writing samples from user's task directories
+    const userPath = path.join(__dirname, '../data/SessionData', userName);
+    const writingSamples = [];
+    
+    if (fs.existsSync(userPath)) {
+      const taskDirs = fs.readdirSync(userPath).filter(dir => {
+        const taskPath = path.join(userPath, dir);
+        return fs.statSync(taskPath).isDirectory() && dir.includes('_');
+      });
+      
+      for (const taskDir of taskDirs) {
+        const latestDraftPath = path.join(userPath, taskDir, 'drafts', 'latest.md');
+        if (fs.existsSync(latestDraftPath)) {
+          const content = fs.readFileSync(latestDraftPath, 'utf-8').trim();
+          if (content) {
+            writingSamples.push(content);
+          }
+        }
+      }
+    }
+
+    // Use first two samples or empty strings if not available
+    const previousEmail1 = writingSamples[0] || '';
+    const previousEmail2 = writingSamples[1] || '';
+
+    const prompt = promptTemplate
+      .replace('{{USER_TASK}}', userTask)
+      .replace('{{FACTOR_CHOICES}}', JSON.stringify(factorChoices, null, 2))
+      .replace('{{PREVIOUS_EMAIL1}}', previousEmail1)
+      .replace('{{PREVIOUS_EMAIL2}}', previousEmail2);
+
+    const draftContent = await sendRequestToGemini(prompt);
+
+    if (!draftContent) {
+      throw new Error('AI response is empty');
+    }
+
+    res.json({ draft: draftContent.trim() });
+  } catch (error) {
+    console.error('Error generating anchor email draft:', error);
+    res.status(500).json({ error: 'Failed to generate anchor email draft' });
+  }
+});
+
 // 提供 SessionData 文件的静态访问
 app.get('/sessiondata/:taskId/*', (req, res) => {
     const { taskId } = req.params;
@@ -464,6 +531,37 @@ app.get('/user-data/:userName/*', (req, res) => {
     } catch (error) {
         console.error('读取用户文件时出错:', error);
         res.status(500).json({ error: '读取文件时出错' });
+    }
+});
+
+// 列出目录内容
+app.post('/list-directory', (req, res) => {
+    const { userName, folderName } = req.body;
+    
+    if (!userName || !folderName) {
+        return res.status(400).json({ error: 'userName and folderName are required' });
+    }
+    
+    // 构建完整路径
+    const fullPath = path.join(__dirname, '../data/SessionData', userName, folderName);
+    
+    console.log('列出目录:', fullPath);
+    
+    // 检查目录是否存在
+    if (!fs.existsSync(fullPath)) {
+        return res.status(404).json({ error: '目录不存在', files: [] });
+    }
+    
+    try {
+        const files = fs.readdirSync(fullPath).filter(file => {
+            const filePath = path.join(fullPath, file);
+            return fs.statSync(filePath).isFile();
+        });
+        
+        res.json({ files });
+    } catch (error) {
+        console.error('读取目录时出错:', error);
+        res.status(500).json({ error: '读取目录时出错', files: [] });
     }
 });
 
@@ -1014,6 +1112,128 @@ app.post('/intent-analyzer-new', async (req, res) => {
     }
 });
 
+// Persona Anchor Adaptation interface
+app.post('/persona-anchor-adaptation', async (req, res) => {
+    const { userName, userTask, selectedAnchor } = req.body;
+
+    if (!userName || !userTask || !selectedAnchor) {
+        return res.status(400).json({ error: 'userName, userTask, and selectedAnchor are required' });
+    }
+
+    try {
+        // Load prompt template
+        const promptPath = path.join(__dirname, '../../public/data/Prompts/1persona_anchor_adaptation.md');
+        let promptTemplate;
+        try {
+            promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+        } catch (error) {
+            console.error('Failed to load 1persona_anchor_adaptation.md:', error);
+            return res.status(500).json({ error: 'Failed to load prompt template' });
+        }
+
+        // Get previous user task from selected anchor
+        const previousUserTask = selectedAnchor.userTask || '';
+
+        // Get previous persona factors from current.json based on userId
+        const currentJsonPath = path.join(__dirname, '../data/SessionData', userName, 'intents', 'current.json');
+        let previousPersonaFactors = [];
+        try {
+            if (fs.existsSync(currentJsonPath)) {
+                const allFactors = JSON.parse(fs.readFileSync(currentJsonPath, 'utf-8'));
+                // Filter factors for persona categories: "Relationship between sender and receiver", "Demography", "Risk Mitigation"
+                previousPersonaFactors = allFactors.filter(factor => 
+                    factor.Category === "Relationship between sender and receiver" ||
+                    factor.Category === "Demography" ||
+                    factor.Category === "Risk Mitigation"
+                );
+            }
+        } catch (error) {
+            console.warn('Could not load previous persona factors:', error);
+        }
+
+        // Replace placeholders in prompt
+        const prompt = promptTemplate
+            .replace('{{PREVIOUS_USER_TASK}}', previousUserTask)
+            .replace('{{USER_TASK}}', userTask)
+            .replace('{{PREVIOUS_PERSONA_FACTORS}}', JSON.stringify(previousPersonaFactors, null, 2));
+
+        const responseText = await sendRequestToGemini(prompt);
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        // Parse JSON response
+        const jsonContent = responseText.replace(/```json|```/g, '').trim();
+        const parsedData = JSON.parse(jsonContent);
+
+        res.json({ adaptedFactors: parsedData.adapted_factors || [] });
+    } catch (error) {
+        console.error('Error in persona-anchor-adaptation:', error);
+        res.status(500).json({ error: 'Error in persona anchor adaptation: ' + error.message });
+    }
+});
+
+// Situation Anchor Adaptation interface
+app.post('/situation-anchor-adaptation', async (req, res) => {
+    const { userName, userTask, selectedAnchor } = req.body;
+
+    if (!userName || !userTask || !selectedAnchor) {
+        return res.status(400).json({ error: 'userName, userTask, and selectedAnchor are required' });
+    }
+
+    try {
+        // Load prompt template
+        const promptPath = path.join(__dirname, '../../public/data/Prompts/2situation_anchor_adaptation.md');
+        let promptTemplate;
+        try {
+            promptTemplate = fs.readFileSync(promptPath, 'utf-8');
+        } catch (error) {
+            console.error('Failed to load 2situation_anchor_adaptation.md:', error);
+            return res.status(500).json({ error: 'Failed to load prompt template' });
+        }
+
+        // Get previous user task from selected anchor
+        const previousUserTask = selectedAnchor.userTask || '';
+
+        // Get previous situation factors from current.json based on userId
+        const currentJsonPath = path.join(__dirname, '../data/SessionData', userName, 'intents', 'current.json');
+        let previousSituationFactors = [];
+        try {
+            if (fs.existsSync(currentJsonPath)) {
+                const allFactors = JSON.parse(fs.readFileSync(currentJsonPath, 'utf-8'));
+                // Filter factors for situation category: "Communication Context"
+                previousSituationFactors = allFactors.filter(factor => 
+                    factor.Category === "Communication Context"
+                );
+            }
+        } catch (error) {
+            console.warn('Could not load previous situation factors:', error);
+        }
+
+        // Replace placeholders in prompt
+        const prompt = promptTemplate
+            .replace('{{PREVIOUS_USER_TASK}}', previousUserTask)
+            .replace('{{USER_TASK}}', userTask)
+            .replace('{{PREVIOUS_SITUATION_FACTORS}}', JSON.stringify(previousSituationFactors, null, 2));
+
+        const responseText = await sendRequestToGemini(prompt);
+
+        if (!responseText) {
+            return res.status(500).json({ error: 'AI response is empty' });
+        }
+
+        // Parse JSON response
+        const jsonContent = responseText.replace(/```json|```/g, '').trim();
+        const parsedData = JSON.parse(jsonContent);
+
+        res.json({ adaptedFactors: parsedData.adapted_factors || [] });
+    } catch (error) {
+        console.error('Error in situation-anchor-adaptation:', error);
+        res.status(500).json({ error: 'Error in situation anchor adaptation: ' + error.message });
+    }
+});
+
 app.post('/component-intent-link', async (req, res) => {
     const { userName, taskId, componentList } = req.body;
 
@@ -1099,6 +1319,10 @@ app.post('/regenerate-anchor', async (req, res) => {
         const responseText = await sendRequestToGemini(prompt);
         const jsonContent = responseText.replace(/```json|```/g, '').trim();
         const updatedAnchor = JSON.parse(jsonContent);
+
+        // Add userTask and taskId to the updated anchor
+        updatedAnchor.userTask = userTask;
+        updatedAnchor.taskId = taskId;
 
         // Save the updated anchor to the original path
         fs.writeFileSync(fullAnchorPath, JSON.stringify(updatedAnchor, null, 2));
@@ -1260,6 +1484,42 @@ app.post('/stylebook-recommend', async (req, res) => {
     } catch (error) {
         console.error('Error in stylebook recommend:', error);
         res.status(500).json({ error: 'Error generating stylebook recommendations' });
+    }
+});
+
+// 更新任务元数据接口
+app.post('/update-task-meta', (req, res) => {
+    const { userName, taskId, originalTask } = req.body;
+
+    if (!userName || !taskId || originalTask === undefined) {
+        return res.status(400).json({ error: 'userName, taskId, and originalTask are required' });
+    }
+
+    const taskMetaPath = path.join(__dirname, '../data/SessionData', userName, taskId, 'meta', 'task.json');
+
+    try {
+        // 读取现有的 task.json
+        let taskMeta = {};
+        if (fs.existsSync(taskMetaPath)) {
+            taskMeta = JSON.parse(fs.readFileSync(taskMetaPath, 'utf-8'));
+        }
+
+        // 更新 original_task 字段
+        taskMeta.original_task = originalTask;
+
+        // 确保目录存在
+        const metaDir = path.dirname(taskMetaPath);
+        if (!fs.existsSync(metaDir)) {
+            fs.mkdirSync(metaDir, { recursive: true });
+        }
+
+        // 写入更新后的内容
+        fs.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2));
+        
+        res.status(200).json({ message: 'Task meta updated successfully' });
+    } catch (error) {
+        console.error('Error updating task meta:', error);
+        res.status(500).json({ error: 'Error updating task meta' });
     }
 });
 

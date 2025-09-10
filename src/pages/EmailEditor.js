@@ -148,6 +148,47 @@ const EmailEditor = () => {
     const [lastModifiedComponent, setLastModifiedComponent] = useState(null);
     const [regenerateLoading, setRegenerateLoading] = useState(false);
     const [anchorLoading, setAnchorLoading] = useState(false);
+    const [modalSaveLoading, setModalSaveLoading] = useState(false);
+    
+    // Utility function to safely reset editor state
+    const safeResetEditor = () => {
+        try {
+            const defaultValue = [
+                {
+                    type: 'paragraph',
+                    children: [{ text: 'Content reset due to error. Please reload.' }],
+                },
+            ];
+            setValue(defaultValue);
+            setSelectedComponentId(null);
+            setComponents([]);
+            setCombinedResults([]);
+            setEditorKey(prev => prev + 1);
+            console.log('Editor state safely reset');
+        } catch (error) {
+            console.error('Error resetting editor:', error);
+        }
+    };
+    
+    // Error boundary effect to catch and handle editor errors
+    useEffect(() => {
+        const handleError = (error) => {
+            console.error('Global error caught:', error);
+            if (error.message && error.message.includes('descendant at path')) {
+                console.log('Slate path error detected, resetting editor state');
+                safeResetEditor();
+                message.error('Editor error detected. Content has been reset. Please try again.');
+            }
+        };
+        
+        window.addEventListener('error', handleError);
+        window.addEventListener('unhandledrejection', handleError);
+        
+        return () => {
+            window.removeEventListener('error', handleError);
+            window.removeEventListener('unhandledrejection', handleError);
+        };
+    }, []);
     
 
     // Generate Anchors function
@@ -177,7 +218,9 @@ const EmailEditor = () => {
                 const imageResponse = await axios.post('http://localhost:3002/generate-and-save-images', {
                     userName: globalUsername,
                     personaAnchor: parsedAnchorData.persona,
-                    situationAnchor: parsedAnchorData.situation
+                    situationAnchor: parsedAnchorData.situation,
+                    userTask: userTask,
+                    taskId: globalTaskId
                 });
                 
                 // 将图片和JSON路径添加到anchor数据中
@@ -217,11 +260,16 @@ const EmailEditor = () => {
             const factorResponse = await axios.get(`http://localhost:3001/sessiondata/${globalTaskId}/intents/current.json`);
             const factorChoices = factorResponse.data;
             
-            // Call generate-first-draft endpoint
-            const response = await axios.post('http://localhost:3001/generate-first-draft', {
-                userTask: userTask,
-                factorChoices: factorChoices
-            });
+            // Get hasAppliedAnchors from location state
+            const hasAppliedAnchors = state?.hasAppliedAnchors || false;
+            
+            // Choose endpoint based on hasAppliedAnchors status
+            const endpoint = hasAppliedAnchors ? 'generate-anchor-email-draft' : 'generate-first-draft';
+            const requestData = hasAppliedAnchors 
+                ? { userTask: userTask, factorChoices: factorChoices, userName: globalUsername }
+                : { userTask: userTask, factorChoices: factorChoices };
+            
+            const response = await axios.post(`http://localhost:3001/${endpoint}`, requestData);
             
             if (response.data) {
                 const newContent = response.data.draft || response.data;
@@ -292,7 +340,29 @@ const EmailEditor = () => {
                     });
                 }
 
-                setValue(slateContent);
+                // Validate the slate content structure
+                const validatedContent = slateContent.map(node => {
+                    if (!node || typeof node !== 'object') {
+                        return { type: 'paragraph', children: [{ text: '' }] };
+                    }
+                    if (!node.children || !Array.isArray(node.children)) {
+                        return { ...node, children: [{ text: node.text || '' }] };
+                    }
+                    return {
+                        ...node,
+                        children: node.children.map(child => {
+                            if (typeof child === 'string') {
+                                return { text: child };
+                            }
+                            if (!child || typeof child !== 'object') {
+                                return { text: '' };
+                            }
+                            return { text: child.text || '', ...child };
+                        })
+                    };
+                });
+
+                setValue(validatedContent);
                 setContentLoaded(true);
             } catch (error) {
                 console.error('Failed to load draft:', error);
@@ -330,20 +400,37 @@ const EmailEditor = () => {
 
         // 1. 新增：清除所有标记的函数
     const clearAllMarkers = () => {
-        const cleanValue = value.map(node => ({
-            ...node,
-            children: node.children.map(child => {
-                if (typeof child === 'string') {
-                    return child;
+        try {
+            if (!value || !Array.isArray(value)) {
+                console.warn('Invalid editor value for clearing markers');
+                return;
+            }
+            
+            const cleanValue = value.map(node => {
+                if (!node || typeof node !== 'object') {
+                    return { type: 'paragraph', children: [{ text: '' }] };
                 }
-                // 移除所有标记，只保留文本和基本格式
-                const { highlight, componentId, hasDimensions, linkedIntents, ...cleanChild } = child;
-                return cleanChild;
-            })
-        }));
-        
-        setValue(cleanValue);
-        setEditorKey(prev => prev + 1);
+                return {
+                    ...node,
+                    children: Array.isArray(node.children) ? node.children.map(child => {
+                        if (typeof child === 'string') {
+                            return child;
+                        }
+                        if (!child || typeof child !== 'object') {
+                            return { text: '' };
+                        }
+                        // 移除所有标记，只保留文本和基本格式
+                        const { highlight, componentId, hasDimensions, linkedIntents, ...cleanChild } = child;
+                        return cleanChild;
+                    }) : [{ text: '' }]
+                };
+            });
+            
+            setValue(cleanValue);
+            setEditorKey(prev => prev + 1);
+        } catch (error) {
+            console.error('Error clearing markers:', error);
+        }
     };
     // Extract components using the component extractor
     const handleExtractComponents = async () => {
@@ -504,21 +591,35 @@ const EmailEditor = () => {
         console.log('Applying highlighting for component:', componentId);
         console.log('Component content:', componentContent);
         
+        // Validate inputs
+        if (!editorValue || !Array.isArray(editorValue) || !componentContent || !componentId) {
+            console.warn('Invalid inputs for highlighting');
+            return editorValue;
+        }
+        
         // 获取该component的linkedIntents
         const combinedResult = combinedResults.find(result => result.id === componentId);
         const linkedIntents = combinedResult?.linkedIntents || [];
         
         // 清除所有highlight属性，保留dimension相关属性
-        const cleanValue = editorValue.map(node => ({
-            ...node,
-            children: node.children.map(child => {
-                if (typeof child === 'string') {
-                    return child;
-                }
-                const { highlight, ...cleanChild } = child;
-                return cleanChild;
-            })
-        }));
+        const cleanValue = editorValue.map(node => {
+            if (!node || typeof node !== 'object') {
+                return { type: 'paragraph', children: [{ text: '' }] };
+            }
+            return {
+                ...node,
+                children: Array.isArray(node.children) ? node.children.map(child => {
+                    if (typeof child === 'string') {
+                        return child;
+                    }
+                    if (!child || typeof child !== 'object') {
+                        return { text: '' };
+                    }
+                    const { highlight, ...cleanChild } = child;
+                    return cleanChild;
+                }) : [{ text: '' }]
+            };
+        });
     
         const position = findTextInEditor(componentContent, cleanValue);
         if (!position) {
@@ -661,78 +762,128 @@ const EmailEditor = () => {
     // 修复后的高亮应用函数
     const applyHighlighting = (componentContent, componentId) => {
         console.log('Applying highlighting for:', componentContent);
-        const newValue = applyHighlightingToValue(value, componentContent, componentId);
-        setValue(newValue);
-        setEditorKey(prev => prev + 1);
+        try {
+            // Validate editor state before applying highlighting
+            if (!value || !Array.isArray(value) || value.length === 0) {
+                console.warn('Invalid editor value, skipping highlighting');
+                return;
+            }
+            
+            const newValue = applyHighlightingToValue(value, componentContent, componentId);
+            
+            // Validate the new value before setting it
+            if (newValue && Array.isArray(newValue) && newValue.length > 0) {
+                setValue(newValue);
+                setEditorKey(prev => prev + 1);
+            } else {
+                console.warn('Invalid new value generated, keeping current value');
+            }
+        } catch (error) {
+            console.error('Error applying highlighting:', error);
+            // Don't update the editor if there's an error
+        }
     };
 
     const removeAllHighlighting = () => {
-        const cleanValue = value.map(node => ({
-            ...node,
-            children: node.children.map(child => {
-                // 只移除highlight属性，保留dimension相关属性
-                const { highlight, ...cleanChild } = child;
-                return cleanChild;
-            })
-        }));
-        
-        setValue(cleanValue);
-        setSelectedComponentId(null);
-        setEditorKey(prev => prev + 1);
+        try {
+            if (!value || !Array.isArray(value)) {
+                console.warn('Invalid editor value for removing highlighting');
+                return;
+            }
+            
+            const cleanValue = value.map(node => {
+                if (!node || typeof node !== 'object') {
+                    return { type: 'paragraph', children: [{ text: '' }] };
+                }
+                return {
+                    ...node,
+                    children: Array.isArray(node.children) ? node.children.map(child => {
+                        if (typeof child === 'string') {
+                            return child;
+                        }
+                        if (!child || typeof child !== 'object') {
+                            return { text: '' };
+                        }
+                        // 只移除highlight属性，保留dimension相关属性
+                        const { highlight, ...cleanChild } = child;
+                        return cleanChild;
+                    }) : [{ text: '' }]
+                };
+            });
+            
+            setValue(cleanValue);
+            setSelectedComponentId(null);
+            setEditorKey(prev => prev + 1);
+        } catch (error) {
+            console.error('Error removing highlighting:', error);
+        }
     };
 
     // 改进后的组件选择处理函数，添加调试信息
     const handleComponentSelect = (component) => {
-        console.log('Selecting component:', component);
-        
-        // 如果toolbar还显示，则关闭它
-        if (floatingToolbar.visible) {
-            closeFloatingToolbar();
+        try {
+            console.log('Selecting component:', component);
+            
+            if (!component || !component.id) {
+                console.warn('Invalid component for selection');
+                return;
+            }
+            
+            // 如果toolbar还显示，则关闭它
+            if (floatingToolbar.visible) {
+                closeFloatingToolbar();
+            }
+            
+            if (selectedComponentId === component.id) {
+                // 如果点击的是已选中的组件，则取消选择
+                console.log('Deselecting component');
+                removeAllHighlighting();
+                return;
+            }
+            
+            // Check if there was a previous modification and show modal
+            if (lastModifiedComponent && lastModifiedComponent.componentId !== component.id) {
+                setChangeModal({
+                    visible: true,
+                    oldContent: lastModifiedComponent.oldContent,
+                    newContent: lastModifiedComponent.newContent,
+                    componentId: lastModifiedComponent.componentId
+                });
+                return;
+            }
+            
+            // 设置新的选中状态
+            console.log('Setting selected component ID:', component.id);
+            setSelectedComponentId(component.id);
+            
+            // 直接应用新的高亮（applyHighlighting函数会先清除所有高亮）
+            applyHighlighting(component.content, component.id);
+        } catch (error) {
+            console.error('Error selecting component:', error);
         }
-        
-        if (selectedComponentId === component.id) {
-            // 如果点击的是已选中的组件，则取消选择
-            console.log('Deselecting component');
-            removeAllHighlighting();
-            return;
-        }
-        
-        // Check if there was a previous modification and show modal
-        if (lastModifiedComponent && lastModifiedComponent.componentId !== component.id) {
-            setChangeModal({
-                visible: true,
-                oldContent: lastModifiedComponent.oldContent,
-                newContent: lastModifiedComponent.newContent,
-                componentId: lastModifiedComponent.componentId
-            });
-            return;
-        }
-        
-        // 设置新的选中状态
-        console.log('Setting selected component ID:', component.id);
-        setSelectedComponentId(component.id);
-        
-        // 直接应用新的高亮（applyHighlighting函数会先清除所有高亮）
-        applyHighlighting(component.content, component.id);
     };
 
     // Handle clicking on highlighted text
     const handleHighlightClick = (event, componentId) => {
-        const component = components.find(c => c.id === componentId);
-        if (!component) return;
+        try {
+            const component = components.find(c => c.id === componentId);
+            if (!component) return;
 
-        // Calculate toolbar position
-        const rect = event.target.getBoundingClientRect();
-        const editorRect = editorRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
-        
-        setFloatingToolbar({
-            visible: true,
-            component: component,
-            position: {
-                top: rect.top - editorRect.top,
-                left: rect.left - editorRect.left,
-            },
-        });
+            // Calculate toolbar position
+            const rect = event.target.getBoundingClientRect();
+            const editorRect = editorRef.current?.getBoundingClientRect() || { left: 0, top: 0 };
+            
+            setFloatingToolbar({
+                visible: true,
+                component: component,
+                position: {
+                    top: rect.top - editorRect.top,
+                    left: rect.left - editorRect.left,
+                },
+            });
+        } catch (error) {
+            console.error('Error handling highlight click:', error);
+        }
     };
 
     // Handle component replacement
@@ -1310,7 +1461,7 @@ const FloatingToolbar = ({ component, onReplace, onClose, position, value, setVa
         >
             {!isEditing && !isRewriting && !isQuickfixing && !isExpanding && !isShortening ? (
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <button
+                    {/* <button
                         style={buttonStyle}
                         onMouseEnter={(e) => Object.assign(e.target.style, buttonHoverStyle)}
                         onMouseLeave={(e) => Object.assign(e.target.style, buttonStyle)}
@@ -1318,7 +1469,7 @@ const FloatingToolbar = ({ component, onReplace, onClose, position, value, setVa
                         title="Edit"
                     >
                         ✏️ Edit
-                    </button>
+                    </button> */}
                     
                     <div style={{ width: '1px', height: '24px', background: '#e0e0e0' }} />
                     
@@ -2515,6 +2666,8 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
         console.log('Saving modification with reason:', modificationReason);
         
         try {
+            setModalSaveLoading(true);
+            
             // Find the component details
             const component = components.find(c => c.id === changeModal.componentId);
             if (!component) {
@@ -2555,6 +2708,8 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
         } catch (error) {
             console.error('Error saving manual edit:', error);
             message.error('Failed to save modification');
+        } finally {
+            setModalSaveLoading(false);
         }
     };
 
@@ -2703,10 +2858,21 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
     // Save draft function - extract current editor content and save
     const handleSaveDraft = async () => {
         try {
+            // Validate editor state
+            if (!value || !Array.isArray(value)) {
+                message.error('Invalid editor content. Please refresh and try again.');
+                return;
+            }
+            
             // Extract current text content from editor
             const currentContent = value.map(node => {
                 return getNodeText(null, node);
-            }).join('\n\n');
+            }).filter(text => text.trim()).join('\n\n');
+            
+            if (!currentContent.trim()) {
+                message.warning('No content to save.');
+                return;
+            }
             
             // Update originalText with current editor content
             setOriginalText(currentContent);
@@ -2841,6 +3007,9 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                     <Button onClick={removeAllHighlighting}>
                         Clear Highlighting
                     </Button>
+                    <Button onClick={safeResetEditor} danger>
+                        Reset Editor
+                    </Button>
                     <Button type="primary" onClick={handleGenerateAnchors} loading={anchorLoading}>Generate Anchors</Button>
                 </div>
             </div>
@@ -2883,7 +3052,41 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                                     key={editorKey}
                                     editor={editor}
                                     initialValue={value}
-                                    onChange={(newValue) => setValue(newValue)}
+                                    onChange={(newValue) => {
+                                        try {
+                                            // Validate the new value before setting it
+                                            if (newValue && Array.isArray(newValue) && newValue.length > 0) {
+                                                // Ensure all nodes have valid structure
+                                                const validatedValue = newValue.map(node => {
+                                                    if (!node || typeof node !== 'object') {
+                                                        return { type: 'paragraph', children: [{ text: '' }] };
+                                                    }
+                                                    if (!node.children || !Array.isArray(node.children)) {
+                                                        return { ...node, children: [{ text: '' }] };
+                                                    }
+                                                    return {
+                                                        ...node,
+                                                        children: node.children.map(child => {
+                                                            if (typeof child === 'string') {
+                                                                return { text: child };
+                                                            }
+                                                            if (!child || typeof child !== 'object') {
+                                                                return { text: '' };
+                                                            }
+                                                            if (child.text === undefined) {
+                                                                return { ...child, text: '' };
+                                                            }
+                                                            return child;
+                                                        })
+                                                    };
+                                                });
+                                                setValue(validatedValue);
+                                            }
+                                        } catch (error) {
+                                            console.error('Error updating editor value:', error);
+                                            // Don't update if there's an error
+                                        }
+                                    }}
                                 >
                                     <Toolbar />
                                     <div style={{ 
@@ -2901,6 +3104,9 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                                                 minHeight: '400px',
                                                 outline: 'none',
                                                 lineHeight: '2.0',
+                                            }}
+                                            onError={(error) => {
+                                                console.error('Slate editor error:', error);
                                             }}
                                         />
                                     </div>
@@ -3191,7 +3397,7 @@ const addDimensionsToValue = (editorValue, componentContent, componentId, linked
                     <Button key="cancel" onClick={handleModalCancel}>
                         Cancel
                     </Button>,
-                    <Button key="save" type="primary" onClick={handleModalSave}>
+                    <Button key="save" type="primary" onClick={handleModalSave} loading={modalSaveLoading}>
                         Save
                     </Button>
                 ]}
