@@ -5,7 +5,6 @@
 ```git clone 
 
 ## Open the project directory in your terminal
-```cd personaMail```
 
 ## Install dependencies
 ```npm install```
@@ -14,7 +13,7 @@
 ```npm start```
 
 ## Run the server
-OpenAI Version
+
 ```
 cd cd src/pages
 node serverGM.js
