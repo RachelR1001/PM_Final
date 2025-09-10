@@ -17,11 +17,12 @@
 OpenAI Version
 ```
 cd cd src/pages
-node server.js
+node serverGM.js
+node serverDB.js
 ```
-The server url is [http://localhost:3001](http://localhost:3001) 
+The server urls are [http://localhost:3001](http://localhost:3001) 
+and [http://localhost:3002](http://localhost:3002) 
 
 ## Open the pages in the browser
 Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
-# personaMail_v2
-# personaMail_v2
+
